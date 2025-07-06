@@ -1,0 +1,71 @@
+const express = require('express');
+const router = express.Router();
+
+// Import route modules
+const queueRoutes = require('./queue');
+const tiktokRoutes = require('./tiktok');
+const systemRoutes = require('./system');
+const configRoutes = require('./config');
+
+// Mount routes
+router.use('/queue', queueRoutes);
+router.use('/tiktok', tiktokRoutes);
+router.use('/system', systemRoutes);
+router.use('/config', configRoutes);
+
+// API info endpoint
+router.get('/', (req, res) => {
+  res.json({
+    name: 'TikTok Live GMod Bridge API',
+    version: '1.0.0',
+    endpoints: {
+      queue: '/api/queue',
+      tiktok: '/api/tiktok',
+      system: '/api/system',
+      config: '/api/config'
+    },
+    documentation: {
+      queue: [
+        'GET /api/queue/status - Get queue status',
+        'GET /api/queue/health - Get queue health',
+        'GET /api/queue/stats - Get processing statistics',
+        'GET /api/queue/distribution - Get event type distribution',
+        'POST /api/queue/clear - Clear queue',
+        'POST /api/queue/optimize - Optimize queue',
+        'POST /api/queue/simulate/:eventType - Simulate TikTok event'
+      ],
+      tiktok: [
+        'GET /api/tiktok/status - Get TikTok service status',
+        'GET /api/tiktok/stats - Get TikTok statistics',
+        'GET /api/tiktok/events/recent - Get recent TikTok events',
+        'GET /api/tiktok/metrics - Get TikTok metrics',
+        'POST /api/tiktok/connect - Connect to TikTok',
+        'POST /api/tiktok/disconnect - Disconnect from TikTok',
+        'POST /api/tiktok/reconnect - Reconnect to TikTok'
+      ],
+      system: [
+        'GET /api/system/overview - Get system overview',
+        'GET /api/system/stats - Get system statistics',
+        'GET /api/system/health - Get service health',
+        'GET /api/system/events/recent - Get recent events',
+        'GET /api/system/metrics/:timeRange - Get metrics by time range',
+        'POST /api/system/restart/:service - Restart service'
+      ],
+      config: [
+        'GET /api/config - Get current configuration',
+        'POST /api/config - Update configuration',
+        'GET /api/config/queue - Get queue configuration',
+        'POST /api/config/queue - Update queue configuration',
+        'GET /api/config/tiktok - Get TikTok configuration',
+        'POST /api/config/tiktok - Update TikTok configuration',
+        'GET /api/config/gmod - Get GMod configuration',
+        'POST /api/config/gmod - Update GMod configuration',
+        'GET /api/config/features - Get feature flags',
+        'POST /api/config/features - Update feature flags'
+      ]
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+module.exports = router;
