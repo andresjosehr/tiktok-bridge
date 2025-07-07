@@ -3,6 +3,7 @@
 const queueProcessor = require('../queue/queueProcessor');
 const queueManager = require('../queue/queueManager');
 const db = require('../database/connection');
+const orm = require('../database/orm');
 const gmodService = require('../services/gmod/gmodService');
 const logger = require('../utils/logger');
 const config = require('../config/config');
@@ -31,6 +32,10 @@ async function showHelp() {
 async function showQueueStatus() {
   try {
     console.log('🔄 Getting queue status...\n');
+    
+    // Initialize database and ORM
+    await db.initialize();
+    await orm.initialize();
     
     const status = await queueManager.getQueueStatus();
     const processorStatus = await queueProcessor.getProcessorStatus();
@@ -82,6 +87,10 @@ async function showHealthStatus() {
   try {
     console.log('🔄 Checking queue health...\n');
     
+    // Initialize database and ORM
+    await db.initialize();
+    await orm.initialize();
+    
     const health = await queueManager.getHealthStatus();
     
     const statusIcon = {
@@ -123,6 +132,10 @@ async function optimizeQueue() {
   try {
     console.log('🔄 Running queue optimization...\n');
     
+    // Initialize database and ORM
+    await db.initialize();
+    await orm.initialize();
+    
     const optimizations = await queueManager.optimizeQueue();
     
     if (optimizations.length === 0) {
@@ -148,6 +161,10 @@ async function startWorker(options = {}) {
     console.log('🔄 Initializing database...');
     await db.createDatabase();
     await db.initialize();
+    
+    // Initialize ORM
+    console.log('🔄 Initializing ORM...');
+    await orm.initialize();
     
     // Initialize services
     console.log('🔄 Initializing services...');
@@ -222,6 +239,7 @@ async function handleShutdown() {
   try {
     await queueProcessor.gracefulShutdown();
     await gmodService.disconnect();
+    await orm.close();
     await db.close();
     console.log('✅ Queue worker stopped gracefully');
     process.exit(0);
@@ -241,18 +259,21 @@ async function main() {
   
   if (args.includes('--status')) {
     await showQueueStatus();
+    await orm.close();
     await db.close();
     process.exit(0);
   }
   
   if (args.includes('--health')) {
     await showHealthStatus();
+    await orm.close();
     await db.close();
     process.exit(0);
   }
   
   if (args.includes('--optimize')) {
     await optimizeQueue();
+    await orm.close();
     await db.close();
     process.exit(0);
   }

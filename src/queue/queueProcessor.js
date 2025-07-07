@@ -10,6 +10,7 @@ class QueueProcessor {
   }
 
   initializeProcessors() {
+    logger.info(`Initializing ${this.enabledProcessors.length} processors: ${this.enabledProcessors.join(', ')}`);
     this.enabledProcessors.forEach(processorType => {
       try {
         const ProcessorClass = this.getProcessorClass(processorType);

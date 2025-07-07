@@ -18,8 +18,25 @@ class QueueProcessorGMod extends QueueProcessorBase {
     this.eventHandlers.set('tiktok:viewerCount', this.handleTikTokViewerCount.bind(this));
   }
 
+  // Verificar si podemos procesar eventos de baile
+  canProcessDanceEvent() {
+    const isDancing = gmodService.isDancing;
+    const queueLength = gmodService.danceQueue.length;
+    const maxQueueSize = 5; // Reducir a 5 para mejor control
+    
+    logger.debug(`Dance status check: isDancing=${isDancing}, queueLength=${queueLength}, maxQueueSize=${maxQueueSize}`);
+    
+    return !isDancing && queueLength < maxQueueSize;
+  }
+
   async handleTikTokChat(data) {
     try {
+      // Verificar si podemos procesar este evento
+      if (!this.canProcessDanceEvent()) {
+        logger.info(`⏸️ Skipping chat event - isDancing=${gmodService.isDancing}, queueLength=${gmodService.danceQueue.length}`);
+        return;
+      }
+      
       await gmodService.handleTikTokChat(data);
       logger.debug('GMod TikTok chat event processed successfully');
     } catch (error) {
@@ -30,6 +47,12 @@ class QueueProcessorGMod extends QueueProcessorBase {
 
   async handleTikTokGift(data) {
     try {
+      // Verificar si podemos procesar este evento
+      if (!this.canProcessDanceEvent()) {
+        logger.info(`⏸️ Skipping gift event - isDancing=${gmodService.isDancing}, queueLength=${gmodService.danceQueue.length}`);
+        return;
+      }
+      
       await gmodService.handleTikTokGift(data);
       logger.debug('GMod TikTok gift event processed successfully');
     } catch (error) {
@@ -40,6 +63,12 @@ class QueueProcessorGMod extends QueueProcessorBase {
 
   async handleTikTokFollow(data) {
     try {
+      // Verificar si podemos procesar este evento
+      if (!this.canProcessDanceEvent()) {
+        logger.info(`⏸️ Skipping follow event - isDancing=${gmodService.isDancing}, queueLength=${gmodService.danceQueue.length}`);
+        return;
+      }
+      
       await gmodService.handleTikTokFollow(data);
       logger.debug('GMod TikTok follow event processed successfully');
     } catch (error) {
@@ -50,6 +79,12 @@ class QueueProcessorGMod extends QueueProcessorBase {
 
   async handleTikTokLike(data) {
     try {
+      // Verificar si podemos procesar este evento
+      if (!this.canProcessDanceEvent()) {
+        logger.info(`⏸️ Skipping like event - isDancing=${gmodService.isDancing}, queueLength=${gmodService.danceQueue.length}`);
+        return;
+      }
+      
       await gmodService.handleTikTokLike(data);
       logger.debug('GMod TikTok like event processed successfully');
     } catch (error) {
@@ -60,6 +95,12 @@ class QueueProcessorGMod extends QueueProcessorBase {
 
   async handleTikTokShare(data) {
     try {
+      // Verificar si podemos procesar este evento
+      if (!this.canProcessDanceEvent()) {
+        logger.info(`⏸️ Skipping share event - isDancing=${gmodService.isDancing}, queueLength=${gmodService.danceQueue.length}`);
+        return;
+      }
+      
       await gmodService.handleTikTokShare(data);
       logger.debug('GMod TikTok share event processed successfully');
     } catch (error) {
@@ -70,6 +111,7 @@ class QueueProcessorGMod extends QueueProcessorBase {
 
   async handleTikTokViewerCount(data) {
     try {
+      // Este evento no genera bailes, siempre se puede procesar
       await gmodService.handleViewerCount(data);
       logger.debug('GMod TikTok viewer count event processed successfully');
     } catch (error) {
@@ -84,7 +126,10 @@ class QueueProcessorGMod extends QueueProcessorBase {
       ...baseStatus,
       gmodService: {
         isConnected: gmodService.isConnected(),
-        lastActivity: gmodService.getLastActivity()
+        lastActivity: gmodService.getLastActivity(),
+        isDancing: gmodService.isDancing,
+        danceQueueSize: gmodService.danceQueue.length,
+        danceQueueStatus: gmodService.getDanceQueueStatus()
       }
     };
   }

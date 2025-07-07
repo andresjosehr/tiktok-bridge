@@ -7,7 +7,7 @@ class QueueProcessorBase {
     this.isProcessing = false;
     this.processingInterval = null;
     this.batchSize = config.queue.batchSize || 1;
-    this.processingDelay = config.queue.processingDelay || 100;
+    this.processingDelay = config.queue.processingDelay || 500;
     this.maxRetryDelay = config.queue.maxRetryDelay || 300;
     this.eventHandlers = new Map();
     this.name = this.constructor.name;
@@ -25,7 +25,7 @@ class QueueProcessorBase {
 
     this.isProcessing = true;
     await this.setupEventHandlers();
-    logger.info(`${this.name} processor started`);
+    logger.info(`${this.name} processor started with ${this.processingDelay}ms polling interval`);
     
     this.processingInterval = setInterval(async () => {
       try {
@@ -34,6 +34,8 @@ class QueueProcessorBase {
         logger.error(`Error in ${this.name} processing cycle:`, error);
       }
     }, this.processingDelay);
+    
+    logger.info(`${this.name} continuous polling started - will check for new jobs every ${this.processingDelay}ms`);
   }
 
   async stop() {
@@ -64,7 +66,7 @@ class QueueProcessorBase {
         return;
       }
 
-      logger.debug(`${this.name} processing batch of ${jobs.length} jobs`);
+      logger.info(`${this.name} processing batch of ${jobs.length} jobs`);
       
       for (const job of jobs) {
         await this.processJob(job);
@@ -79,12 +81,9 @@ class QueueProcessorBase {
     
     for (let i = 0; i < this.batchSize; i++) {
       const EventQueue = orm.getModel('EventQueue');
-      const job = await EventQueue.findNextJob();
+      const job = await EventQueue.findAndClaimNextJob();
       if (job) {
-        const marked = await job.markAsProcessing();
-        if (marked) {
-          jobs.push(job);
-        }
+        jobs.push(job);
       } else {
         break;
       }
@@ -166,7 +165,7 @@ class QueueProcessorBase {
       
       const marked = await job.markAsProcessing();
       if (!marked) {
-        throw new Error(`Failed to mark job ${jobId} as processing`);
+        throw new Error(`Failed to mark job ${jobId} as processing - job may have been taken by another worker`);
       }
       
       await this.processJob(job);
@@ -213,7 +212,7 @@ class QueueProcessorBase {
       }, this.processingDelay);
     }
     
-    logger.info(`${this.name} processing delay updated to: ${delay}ms`);
+    logger.info(`${this.name} polling interval updated to: ${delay}ms`);
   }
 
   async gracefulShutdown() {

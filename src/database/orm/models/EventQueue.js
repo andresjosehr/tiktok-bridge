@@ -1,4 +1,4 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Op } = require('sequelize');
 
 module.exports = (sequelize) => {
   const EventQueue = sequelize.define('EventQueue', {
@@ -102,14 +102,14 @@ module.exports = (sequelize) => {
         where: {
           status: 'pending',
           available_at: {
-            [sequelize.Sequelize.Op.lte]: new Date()
+            [Op.lte]: new Date()
           }
         }
       },
       canRetry: {
         where: {
           attempts: {
-            [sequelize.Sequelize.Op.lt]: sequelize.Sequelize.col('max_attempts')
+            [Op.lt]: sequelize.col('max_attempts')
           }
         }
       },
@@ -120,10 +120,30 @@ module.exports = (sequelize) => {
   });
 
   EventQueue.prototype.markAsProcessing = async function() {
+    const EventQueue = this.constructor;
+    const [affectedCount] = await EventQueue.update(
+      {
+        status: 'processing',
+        attempts: this.attempts + 1,
+        updated_at: new Date()
+      },
+      {
+        where: {
+          id: this.id,
+          status: 'pending' // Only update if still pending
+        }
+      }
+    );
+    
+    if (affectedCount === 0) {
+      return false; // Job was already taken by another worker
+    }
+    
+    // Update the instance to reflect the changes
     this.status = 'processing';
     this.attempts += 1;
     this.updated_at = new Date();
-    return await this.save();
+    return true;
   };
 
   EventQueue.prototype.markAsCompleted = async function() {
@@ -160,6 +180,68 @@ module.exports = (sequelize) => {
     return await this.scope(['available', 'canRetry', 'byPriority']).findOne();
   };
 
+  EventQueue.findAndClaimNextJob = async function() {
+    const transaction = await this.sequelize.transaction();
+    
+    try {
+      // Use a more permissive time filter to account for timing differences
+      const now = new Date();
+      now.setSeconds(now.getSeconds() + 1); // Add 1 second buffer
+      
+      const job = await this.findOne({
+        where: {
+          status: 'pending',
+          available_at: {
+            [Op.lte]: now
+          },
+          attempts: {
+            [Op.lt]: this.sequelize.col('max_attempts')
+          }
+        },
+        order: [['priority', 'DESC'], ['available_at', 'ASC']],
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+      
+      if (!job) {
+        await transaction.commit();
+        return null;
+      }
+      
+      const [affectedCount] = await this.update(
+        {
+          status: 'processing',
+          attempts: job.attempts + 1,
+          updated_at: new Date()
+        },
+        {
+          where: {
+            id: job.id,
+            status: 'pending'
+          },
+          transaction
+        }
+      );
+      
+      if (affectedCount === 0) {
+        await transaction.commit();
+        return null; // Job was already taken
+      }
+      
+      await transaction.commit();
+      
+      // Update the instance to reflect the changes
+      job.status = 'processing';
+      job.attempts += 1;
+      job.updated_at = new Date();
+      
+      return job;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  };
+
   EventQueue.getQueueSize = async function(status = 'pending') {
     return await this.count({
       where: { status }
@@ -183,7 +265,7 @@ module.exports = (sequelize) => {
       where: {
         status: 'completed',
         processed_at: {
-          [sequelize.Sequelize.Op.lt]: cutoffDate
+          [Op.lt]: cutoffDate
         }
       }
     });
@@ -199,7 +281,7 @@ module.exports = (sequelize) => {
       where: {
         status: 'failed',
         updated_at: {
-          [sequelize.Sequelize.Op.lt]: cutoffDate
+          [Op.lt]: cutoffDate
         }
       }
     });
@@ -212,10 +294,10 @@ module.exports = (sequelize) => {
       where: {
         status: 'pending',
         event_type: {
-          [sequelize.Sequelize.Op.notIn]: ['tiktok:gift', 'tiktok:donation']
+          [Op.notIn]: ['tiktok:gift', 'tiktok:donation']
         },
         priority: {
-          [sequelize.Sequelize.Op.lt]: 100
+          [Op.lt]: 100
         }
       },
       order: [['created_at', 'ASC']],
@@ -230,7 +312,7 @@ module.exports = (sequelize) => {
     const result = await this.destroy({
       where: {
         id: {
-          [sequelize.Sequelize.Op.in]: ids
+          [Op.in]: ids
         }
       }
     });
@@ -252,7 +334,7 @@ module.exports = (sequelize) => {
         where: {
           status: 'processing',
           updated_at: {
-            [sequelize.Sequelize.Op.lt]: cutoffDate
+            [Op.lt]: cutoffDate
           }
         }
       }
@@ -272,7 +354,7 @@ module.exports = (sequelize) => {
       ],
       where: {
         status: {
-          [sequelize.Sequelize.Op.in]: ['pending', 'processing']
+          [Op.in]: ['pending', 'processing']
         }
       },
       group: ['status', 'priority'],
@@ -295,7 +377,7 @@ module.exports = (sequelize) => {
       ],
       where: {
         created_at: {
-          [sequelize.Sequelize.Op.gte]: oneDayAgo
+          [Op.gte]: oneDayAgo
         }
       },
       group: ['event_type', 'status'],

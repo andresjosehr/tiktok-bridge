@@ -38,16 +38,23 @@ const startServer = async () => {
     logger.info('Initializing ORM...');
     await orm.initialize();
     
+    // Clear any existing events in the queue on startup
+    logger.info('Clearing event queue on startup...');
+    const EventQueue = orm.getModel('EventQueue');
+    const clearedCount = await EventQueue.destroy({
+      where: {}
+    });
+    logger.info(`Cleared ${clearedCount} events from queue`);
+    
     logger.info('Initializing TikTok service...');
     await tiktokService.initialize();
     
     logger.info('Initializing GMod service...');
     await gmodService.initialize();
     
-    if (config.queue.autoStart) {
-      logger.info('Starting queue processor...');
-      await queueProcessor.start();
-    }
+    // Always start the queue processor after all services are initialized
+    logger.info('Starting queue processor...');
+    await queueProcessor.start();
     
     const server = app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port}`);
