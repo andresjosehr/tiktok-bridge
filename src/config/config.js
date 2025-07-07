@@ -41,7 +41,8 @@ module.exports = {
     maxRetryDelay: parseInt(process.env.QUEUE_MAX_RETRY_DELAY) || 300,
     autoStart: process.env.QUEUE_AUTO_START !== 'false',
     cleanupInterval: parseInt(process.env.QUEUE_CLEANUP_INTERVAL) || 3600000,
-    optimizationInterval: parseInt(process.env.QUEUE_OPTIMIZATION_INTERVAL) || 1800000
+    optimizationInterval: parseInt(process.env.QUEUE_OPTIMIZATION_INTERVAL) || 1800000,
+    enabledProcessors: process.env.QUEUE_ENABLED_PROCESSORS ? process.env.QUEUE_ENABLED_PROCESSORS.split(',') : ['gmod']
   },
 
   logging: {
