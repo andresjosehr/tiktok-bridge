@@ -111,6 +111,12 @@ class QueueProcessor {
         this.currentJobInProgress = false;
         this.pendingProcessPromise = null;
         
+        // Aplicar el delay de procesamiento configurado
+        if (config.queue.processingDelay > 0) {
+          logger.debug(`${this.name} applying processing delay: ${config.queue.processingDelay}ms`);
+          await new Promise(resolve => setTimeout(resolve, config.queue.processingDelay));
+        }
+        
       } catch (error) {
         logger.error(`Error in ${this.name} processing cycle:`, error);
         this.currentJobInProgress = false;

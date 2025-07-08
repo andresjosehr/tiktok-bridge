@@ -48,9 +48,9 @@ class TTSService {
       model_id: model,
       voice_settings: {
         stability: stability,
-        similarity_boost: similarityBoost
+        similarity_boost: similarityBoost,
+        speed: 0.8
       },
-      speed
     };
 
     // Add output_format to request body if specified
