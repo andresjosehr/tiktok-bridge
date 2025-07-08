@@ -1,17 +1,20 @@
 const orm = require('../database/orm');
 const logger = require('../utils/logger');
 const config = require('../config/config');
+const EventEmitter = require('events');
+const queueManager = require('./queueManager');
 
 class QueueProcessorBase {
   constructor() {
     this.isProcessing = false;
-    this.processingInterval = null;
-    this.currentJobInProgress = false; // Para evitar tomar más trabajos mientras uno está en progreso
+    this.currentJobInProgress = false;
     this.batchSize = 1; // Siempre procesar de uno en uno
-    this.processingDelay = config.queue.processingDelay || 500;
     this.maxRetryDelay = config.queue.maxRetryDelay || 300;
     this.eventHandlers = new Map();
     this.name = this.constructor.name;
+    this.pendingProcessPromise = null;
+    this.jobNotifier = new EventEmitter();
+    this.waitingForJob = false;
   }
 
   async setupEventHandlers() {
@@ -26,17 +29,14 @@ class QueueProcessorBase {
 
     this.isProcessing = true;
     await this.setupEventHandlers();
-    logger.info(`${this.name} processor started with ${this.processingDelay}ms polling interval`);
     
-    this.processingInterval = setInterval(async () => {
-      try {
-        await this.processBatch();
-      } catch (error) {
-        logger.error(`Error in ${this.name} processing cycle:`, error);
-      }
-    }, this.processingDelay);
+    // Registrar este procesador para notificaciones
+    queueManager.registerProcessor(this);
     
-    logger.info(`${this.name} continuous polling started - will check for new jobs every ${this.processingDelay}ms`);
+    logger.info(`${this.name} processor started with promise-based processing`);
+    
+    // Iniciar el procesamiento inmediatamente
+    this.startProcessing();
   }
 
   async stop() {
@@ -47,45 +47,70 @@ class QueueProcessorBase {
 
     this.isProcessing = false;
     
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
+    // Desregistrar de las notificaciones
+    queueManager.unregisterProcessor(this);
+    
+    // Esperar a que termine el trabajo actual si existe
+    if (this.pendingProcessPromise) {
+      await this.pendingProcessPromise;
     }
     
     logger.info(`${this.name} processor stopped`);
   }
 
-  async processBatch() {
-    if (!this.isProcessing) {
-      return;
-    }
+  async startProcessing() {
+    while (this.isProcessing) {
+      try {
+        // Si ya hay un trabajo en progreso, esperar
+        if (this.currentJobInProgress) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          continue;
+        }
 
-    // Si ya hay un trabajo en progreso, no buscar más
-    if (this.currentJobInProgress) {
-      return;
-    }
+        // Obtener solo UN trabajo
+        const job = await this.getNextJob();
+        
+        if (!job) {
+          // No hay trabajos, esperar notificación de nuevos trabajos
+          logger.debug(`${this.name} waiting for new jobs...`);
+          this.waitingForJob = true;
+          await new Promise(resolve => {
+            const timeout = setTimeout(() => {
+              this.waitingForJob = false;
+              resolve();
+            }, 5000); // Timeout de 5 segundos para verificar periódicamente
+            
+            this.jobNotifier.once('newJob', () => {
+              clearTimeout(timeout);
+              this.waitingForJob = false;
+              resolve();
+            });
+          });
+          continue;
+        }
 
-    try {
-      // Obtener solo UN trabajo
-      const job = await this.getNextJob();
-      
-      if (!job) {
-        return;
+        logger.info(`${this.name} processing job ${job.id}: ${job.event_type}`);
+        
+        // Marcar que hay un trabajo en progreso
+        this.currentJobInProgress = true;
+        
+        // Procesar el trabajo y esperar a que termine completamente
+        this.pendingProcessPromise = this.processJob(job);
+        await this.pendingProcessPromise;
+        
+        // Marcar que el trabajo terminó
+        this.currentJobInProgress = false;
+        this.pendingProcessPromise = null;
+        
+      } catch (error) {
+        logger.error(`Error in ${this.name} processing cycle:`, error);
+        this.currentJobInProgress = false;
+        this.pendingProcessPromise = null;
+        this.waitingForJob = false;
+        
+        // Esperar un poco antes de continuar en caso de error
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-
-      logger.info(`${this.name} processing job ${job.id}: ${job.event_type}`);
-      
-      // Marcar que hay un trabajo en progreso
-      this.currentJobInProgress = true;
-      
-      // Procesar el trabajo y esperar a que termine completamente
-      await this.processJob(job);
-      
-      // Marcar que el trabajo terminó
-      this.currentJobInProgress = false;
-    } catch (error) {
-      logger.error(`Error processing job in ${this.name}:`, error);
-      this.currentJobInProgress = false; // Asegurar que se libere en caso de error
     }
   }
 
@@ -192,8 +217,8 @@ class QueueProcessorBase {
     return {
       name: this.name,
       isProcessing: this.isProcessing,
+      currentJobInProgress: this.currentJobInProgress,
       batchSize: this.batchSize,
-      processingDelay: this.processingDelay,
       maxRetryDelay: this.maxRetryDelay,
       registeredHandlers: this.getRegisteredHandlers()
     };
@@ -207,24 +232,16 @@ class QueueProcessorBase {
     logger.info(`${this.name} batch size updated to: ${size}`);
   }
 
-  setProcessingDelay(delay) {
-    if (delay < 10 || delay > 10000) {
-      throw new Error('Processing delay must be between 10 and 10000ms');
+  // Método deprecated - ya no se usa processingDelay
+  setProcessingDelay() {
+    logger.warn(`${this.name} setProcessingDelay is deprecated - processor now uses promise-based processing`);
+  }
+
+  // Notificar al procesador que hay un nuevo trabajo disponible
+  notifyNewJob() {
+    if (this.waitingForJob) {
+      this.jobNotifier.emit('newJob');
     }
-    this.processingDelay = delay;
-    
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = setInterval(async () => {
-        try {
-          await this.processBatch();
-        } catch (error) {
-          logger.error(`Error in ${this.name} processing cycle:`, error);
-        }
-      }, this.processingDelay);
-    }
-    
-    logger.info(`${this.name} polling interval updated to: ${delay}ms`);
   }
 
   async gracefulShutdown() {
@@ -232,9 +249,10 @@ class QueueProcessorBase {
     
     this.isProcessing = false;
     
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
+    // Esperar a que termine el trabajo actual
+    if (this.pendingProcessPromise) {
+      logger.info(`${this.name} waiting for current job to complete...`);
+      await this.pendingProcessPromise;
     }
     
     let waitTime = 0;

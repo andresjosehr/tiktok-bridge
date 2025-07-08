@@ -17,6 +17,7 @@ class QueueManager {
     
     this.maxQueueSize = config.queue.maxSize || 1000;
     this.giftEventTypes = ['tiktok:gift', 'tiktok:donation'];
+    this.processors = []; // Lista de procesadores registrados
   }
 
   async addEvent(eventType, eventData, options = {}) {
@@ -38,9 +39,16 @@ class QueueManager {
       
       logger.debug(`Event added to queue: ${eventType} (ID: ${queueId}, Priority: ${priority})`);
       
+      // Notificar a todos los procesadores que hay un nuevo trabajo
+      this.notifyProcessors();
+      
       return queueId;
     } catch (error) {
-      logger.error(`Failed to add event to queue: ${eventType}`, error);
+      if (error.isQueueFull) {
+        logger.info(`Queue full, skipping ${eventType} event (priority too low)`);
+      } else {
+        logger.error(`Failed to add event to queue: ${eventType}`, error);
+      }
       throw error;
     }
   }
@@ -55,7 +63,9 @@ class QueueManager {
         logger.info(`Queue full, removed ${removedCount} non-gift events to make room for gift`);
       } else {
         if (priority < 50) {
-          throw new Error(`Queue is full (${currentQueueSize}/${this.maxQueueSize}) and event priority is too low`);
+          const error = new Error(`Queue is full (${currentQueueSize}/${this.maxQueueSize}) and event priority is too low`);
+          error.isQueueFull = true;
+          throw error;
         }
         
         const EventQueue = orm.getModel('EventQueue');
@@ -263,6 +273,34 @@ class QueueManager {
         error: error.message
       };
     }
+  }
+
+  // Registrar un procesador para notificaciones
+  registerProcessor(processor) {
+    if (!this.processors.includes(processor)) {
+      this.processors.push(processor);
+      logger.debug(`Processor ${processor.name} registered for notifications`);
+    }
+  }
+
+  // Desregistrar un procesador
+  unregisterProcessor(processor) {
+    const index = this.processors.indexOf(processor);
+    if (index > -1) {
+      this.processors.splice(index, 1);
+      logger.debug(`Processor ${processor.name} unregistered from notifications`);
+    }
+  }
+
+  // Notificar a todos los procesadores que hay nuevos trabajos
+  notifyProcessors() {
+    this.processors.forEach(processor => {
+      try {
+        processor.notifyNewJob();
+      } catch (error) {
+        logger.error(`Failed to notify processor ${processor.name}:`, error);
+      }
+    });
   }
 }
 
