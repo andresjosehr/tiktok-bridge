@@ -374,7 +374,7 @@ class GModService extends ServiceBase {
     for (const milestone of this.likeMilestones) {
       if (totalLikes >= milestone && this.lastLikeMilestone < milestone) {
         this.lastLikeMilestone = milestone;
-        this.processSingleDanceWithTTS('like_count_hit', {
+        this.processDance('like_count_hit', {
           count: milestone
         }).catch(error => {
           logger.error('Failed to generate TTS + dance for like milestone:', error);
@@ -389,7 +389,7 @@ class GModService extends ServiceBase {
     for (const milestone of this.followMilestones) {
       if (totalFollows >= milestone && this.lastFollowMilestone < milestone) {
         this.lastFollowMilestone = milestone;
-        this.processSingleDanceWithTTS('follow_count_hit', {
+        this.processDance('follow_count_hit', {
           count: milestone
         }).catch(error => {
           logger.error('Failed to generate TTS + dance for follow milestone:', error);
@@ -688,8 +688,8 @@ class GModService extends ServiceBase {
       }
     }
 
-    // Procesar baile con TTS sincronizado si está configurado
-    return await this.processSingleDanceWithTTS('chat', data);
+    // Procesar baile con TTS sincronizado
+    return await this.processDance('chat', data);
   }
 
   async handleTikTokGift(data) {
@@ -717,8 +717,8 @@ class GModService extends ServiceBase {
       }
     }
 
-    // Procesar baile con TTS sincronizado si está configurado
-    return await this.processSingleDanceWithTTS('gift', data);
+    // Procesar baile con TTS sincronizado
+    return await this.processDance('gift', data);
   }
 
   async handleTikTokFollow(data) {
@@ -732,8 +732,8 @@ class GModService extends ServiceBase {
       });
     }
 
-    // Procesar baile con TTS sincronizado si está configurado
-    return await this.processSingleDanceWithTTS('follow', data);
+    // Procesar baile con TTS sincronizado
+    return await this.processDance('follow', data);
   }
 
   async handleTikTokLike(data) {
@@ -754,8 +754,8 @@ class GModService extends ServiceBase {
       this.checkLikeMilestone(data.totalLikeCount);
     }
 
-    // Procesar baile con TTS sincronizado si está configurado
-    return await this.processSingleDanceWithTTS('like', data);
+    // Procesar baile con TTS sincronizado
+    return await this.processDance('like', data);
   }
 
   async handleTikTokShare(data) {
@@ -769,8 +769,8 @@ class GModService extends ServiceBase {
       });
     }
 
-    // Procesar baile con TTS sincronizado si está configurado
-    return await this.processSingleDanceWithTTS('share', data);
+    // Procesar baile con TTS sincronizado
+    return await this.processDance('share', data);
   }
 
   async handleViewerCount(data) {
@@ -863,69 +863,8 @@ class GModService extends ServiceBase {
     return dances[Math.floor(Math.random() * dances.length)];
   }
 
-  // Procesar un solo baile inmediatamente y esperar a que termine
-  async processSingleDance(eventType, data) {
-    // Verificar si ya estamos bailando
-    if (this.isDancing) {
-      logger.info(`⏸️ Skipping ${eventType} event - already dancing`);
-      // Crear una excepción especial para eventos omitidos
-      const skipError = new Error('Event skipped - already dancing');
-      skipError.isSkipped = true;
-      throw skipError;
-    }
-
-    const category = this.eventDanceMapping[eventType];
-    if (!category) {
-      logger.warn(`No dance category mapped for event type: ${eventType}`);
-      return false;
-    }
-
-    const dance = this.getRandomDance(category);
-    if (!dance) {
-      logger.warn(`No dances available for category: ${category}`);
-      return false;
-    }
-
-    const danceItem = {
-      dance,
-      eventType,
-      data,
-      timestamp: Date.now()
-    };
-
-    logger.info(`Starting dance: ${dance} for event: ${eventType}`);
-    
-    // Marcar como bailando
-    this.isDancing = true;
-    
-    try {
-      // Ejecutar el baile
-      const success = await this.executeDance(danceItem);
-      
-      if (success) {
-        // Esperar la duración del baile
-        await new Promise(resolve => {
-          this.currentDanceTimer = setTimeout(() => {
-            this.isDancing = false;
-            this.currentDanceTimer = null;
-            logger.info(`Dance completed: ${dance}`);
-            resolve();
-          }, this.danceTimeout);
-        });
-        return true;
-      } else {
-        this.isDancing = false;
-        return false;
-      }
-    } catch (error) {
-      logger.error(`Error executing dance ${dance}:`, error);
-      this.isDancing = false;
-      return false;
-    }
-  }
-
-  // Nueva función que integra TTS con bailes sincronizados
-  async processSingleDanceWithTTS(eventType, data) {
+  // Procesar baile con TTS integrado
+  async processDance(eventType, data) {
     // Verificar si ya estamos bailando
     if (this.isDancing) {
       logger.info(`⏸️ Skipping ${eventType} event - already dancing`);
@@ -938,8 +877,8 @@ class GModService extends ServiceBase {
     const hasTTSMessage = this.ttsMessages[eventType] && this.ttsMessages[eventType].length > 0;
     
     if (!hasTTSMessage) {
-      logger.warn(`No TTS message configured for event type: ${eventType}, using normal dance`);
-      return await this.processSingleDance(eventType, data);
+      logger.warn(`No TTS message configured for event type: ${eventType}, skipping dance`);
+      return false;
     }
 
     const category = this.eventDanceMapping[eventType];
@@ -964,24 +903,9 @@ class GModService extends ServiceBase {
       const ttsResult = await this.generateAndSendTTS(eventType, data);
       
       if (!ttsResult) {
-        logger.warn('TTS generation failed, proceeding with dance only');
-        // Si falla TTS, continuar solo con el baile usando duración por defecto
-        const success = await this.executeDance({ dance, eventType, data, timestamp: Date.now() });
-        
-        if (success) {
-          await new Promise(resolve => {
-            this.currentDanceTimer = setTimeout(() => {
-              this.isDancing = false;
-              this.currentDanceTimer = null;
-              logger.info(`Dance completed (no TTS): ${dance}`);
-              resolve();
-            }, this.danceTimeout);
-          });
-          return true;
-        } else {
-          this.isDancing = false;
-          return false;
-        }
+        logger.warn('TTS generation failed, skipping dance');
+        this.isDancing = false;
+        return false;
       }
 
       // PASO 2: Ejecutar el baile al mismo tiempo que se reproduce el TTS
