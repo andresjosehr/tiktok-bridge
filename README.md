@@ -11,6 +11,8 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 - **Manejo robusto de errores** y logging detallado
 
 ### 🚦 Sistema de Colas Inteligente
+- **Cola única con servicios intercambiables** (GMod, GTAV, y más)
+- **Arquitectura modular** con `ServiceBase` para fácil extensión
 - **Cola con prioridades** configurables por tipo de evento
 - **Límite de tamaño** configurable (default: 1000 eventos)
 - **Prioridad especial para donaciones**: Nunca se excluyen y van al frente
@@ -34,11 +36,12 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 - **Estadísticas de rendimiento** y métricas de cola
 - **Limpieza automática** de eventos antiguos
 
-### 🎮 Comunicación con Garry's Mod
-- **WebSocket** para comunicación en tiempo real
-- **HTTP fallback** para mayor confiabilidad
+### 🎮 Servicios de Juegos Soportados
+- **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real
+- **GTAV/FiveM**: Preparado para integración futura
+- **Arquitectura extensible** para agregar nuevos juegos
 - **Reconexión automática** cuando se pierde la conexión
-- **Formato de mensajes estandarizado**
+- **Formato de mensajes estandarizado** entre servicios
 
 ### 🌐 Frontend React
 - **Simulador de eventos** de TikTok para testing
@@ -178,7 +181,7 @@ garrys-tiktok/
 │   │   └── external/                   # Servicios externos
 │   ├── queue/
 │   │   ├── queueManager.js             # Gestor de cola
-│   │   └── queueProcessor.js           # Procesador de eventos
+│   │   └── queueProcessor.js           # Procesador único con servicios intercambiables
 │   ├── api/                            # Endpoints REST API
 │   ├── cli/                            # Comandos CLI
 │   └── utils/                          # Utilidades
@@ -254,8 +257,8 @@ DB_DATABASE=garrys_tiktok
 # Cola
 QUEUE_MAX_SIZE=1000
 QUEUE_BATCH_SIZE=1
-QUEUE_PROCESSING_DELAY=100
 QUEUE_MAX_ATTEMPTS=3
+QUEUE_ACTIVE_SERVICE=gmod
 
 # TikTok
 TIKTOK_USERNAME=tu_usuario
@@ -315,9 +318,15 @@ npm run migrate
 
 ### Agregar Nuevo Tipo de Evento
 1. Definir prioridad en `queueManager.js`
-2. Agregar handler en `queueProcessor.js`
+2. Implementar método handler en `ServiceBase` y servicios específicos
 3. Integrar en `eventManager.js`
 4. Actualizar frontend si es necesario
+
+### Agregar Nuevo Servicio (ej. FiveM, CS2)
+1. Crear nuevo servicio extendiendo `ServiceBase`
+2. Implementar todos los métodos requeridos (`handleTikTokChat`, `handleTikTokGift`, etc.)
+3. Registrar servicio en `QueueProcessorManager.initializeServices()`
+4. Configurar mediante `QUEUE_ACTIVE_SERVICE` environment variable
 
 ## 📈 Monitoreo y Métricas
 

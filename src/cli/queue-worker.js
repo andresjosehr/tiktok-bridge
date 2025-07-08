@@ -4,7 +4,7 @@ const queueProcessor = require('../queue/queueProcessor');
 const queueManager = require('../queue/queueManager');
 const db = require('../database/connection');
 const orm = require('../database/orm');
-const gmodService = require('../services/gmod/gmodService');
+const gmodService = require('../services/gmod/gmodServiceInstance');
 const logger = require('../utils/logger');
 const config = require('../config/config');
 const cron = require('node-cron');
@@ -45,8 +45,8 @@ async function showQueueStatus() {
     console.log('=============');
     console.log(`Current size: ${status.currentSize}/${status.maxSize} (${status.utilizationPercent}%)`);
     console.log(`Processing: ${processorStatus.isProcessing ? '✅ Running' : '❌ Stopped'}`);
+    console.log(`Active Service: ${processorStatus.activeServiceType}`);
     console.log(`Batch size: ${processorStatus.batchSize}`);
-    console.log(`Processing delay: ${processorStatus.processingDelay}ms`);
     console.log(`Max retry delay: ${processorStatus.maxRetryDelay}s\n`);
     
     if (status.stats.length > 0) {
@@ -176,10 +176,6 @@ async function startWorker(options = {}) {
       console.log(`📦 Batch size set to: ${options.batchSize}`);
     }
     
-    if (options.delay) {
-      queueProcessor.setProcessingDelay(options.delay);
-      console.log(`⏱️  Processing delay set to: ${options.delay}ms`);
-    }
     
     // Start queue processor
     console.log('🔄 Starting queue processor...');

@@ -3,9 +3,11 @@ const axios = require('axios');
 const Rcon = require('rcon');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
+const ServiceBase = require('../ServiceBase');
 
-class GModService {
+class GModService extends ServiceBase {
   constructor() {
+    super('GMod');
     this.wsConnection = null;
     this.rconConnection = null;
     this.httpClient = axios.create({
@@ -13,8 +15,6 @@ class GModService {
       timeout: 5000
     });
     this.reconnectInterval = null;
-    this._isConnected = false;
-    this.connectedAt = null;
     
     // Sistema de cola de bailes
     this.danceQueue = [];
@@ -991,4 +991,4 @@ class GModService {
   }
 }
 
-module.exports = new GModService();
+module.exports = GModService;

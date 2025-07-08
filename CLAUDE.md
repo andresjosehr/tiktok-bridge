@@ -10,9 +10,10 @@ This is a TikTok Live events bridge for Garry's Mod - a Node.js application that
 
 ### Backend (Node.js)
 - **Event Manager**: Central hub for processing TikTok events with configurable priorities
-- **Queue System**: Intelligent queue with priority-based filtering and MySQL persistence
+- **Queue System**: Single queue processor with interchangeable services architecture
+- **Service Architecture**: `ServiceBase` class for modular service implementation
 - **TikTok Service**: Handles TikTok Live connection using `tiktok-live-connector`
-- **GMod Service**: Manages WebSocket/HTTP communication with Garry's Mod servers
+- **Game Services**: GMod service (active), GTAV service (prepared), extensible for more
 - **Migration System**: Laravel-style database migrations with up/down methods
 - **ORM Layer**: Custom ORM in `src/database/orm/` for type-safe database operations
 
@@ -77,6 +78,7 @@ Key environment variables (see `src/config/config.js` for all options):
 - `TIKTOK_USERNAME`: TikTok user to connect to
 - `GMOD_HOST`, `GMOD_WS_PORT`, `GMOD_HTTP_PORT`: Garry's Mod server connection
 - `QUEUE_MAX_SIZE`: Queue size limit (default: 1000)
+- `QUEUE_ACTIVE_SERVICE`: Active service (gmod, gtav) (default: gmod)
 - `PORT`: Server port (default: 3000)
 
 ## External Service Integrations
@@ -90,8 +92,11 @@ The system is prepared for (but may not have implemented):
 ## File Structure Notes
 
 - `src/app.js`: Main Express application entry point
-- `src/services/`: Core business logic (TikTok, GMod, Event Manager)
-- `src/queue/`: Queue management and processing
+- `src/services/`: Core business logic (TikTok, GMod, GTAV, Event Manager)
+  - `ServiceBase.js`: Base class for all game services
+  - `gmod/gmodService.js`: GMod service implementation
+  - `gtav/GTAVService.js`: GTAV service implementation
+- `src/queue/`: Queue management and single processor with service switching
 - `src/cli/`: Command-line utilities for migrations and queue management
 - `frontend/src/`: React application with components, pages, hooks
 - `logs/`: Application logs (check `logs/app.log` for debugging)
@@ -111,11 +116,21 @@ The system is prepared for (but may not have implemented):
 - Health checks available at `/health` and `/status` endpoints
 - Queue status monitoring at `/api/queue/status`
 
-## GMod Integration
+## Game Service Integration
 
-The system communicates with Garry's Mod via:
-- **WebSocket**: Real-time event streaming
-- **HTTP API**: Fallback communication and command execution
-- **Message Format**: JSON with `type`, `data`, and `timestamp` fields
+The system uses a modular service architecture:
+- **ServiceBase**: Abstract base class defining the interface for all game services
+- **Active Service**: Configured via `QUEUE_ACTIVE_SERVICE` environment variable
+- **Service Switching**: Can change active service at runtime via `queueProcessor.changeActiveService()`
 
-When making changes to event processing, ensure compatibility with the expected GMod message format documented in the README.
+### Current Services:
+- **GMod Service**: WebSocket/HTTP communication with Garry's Mod servers
+- **GTAV Service**: Prepared template for GTA V/FiveM integration
+
+### Adding New Services:
+1. Extend `ServiceBase` class
+2. Implement required methods: `handleTikTokChat`, `handleTikTokGift`, `handleTikTokFollow`, etc.
+3. Register in `QueueProcessorManager.initializeServices()`
+4. Configure via environment variable
+
+When making changes to event processing, ensure compatibility with the expected message format documented in the README.
