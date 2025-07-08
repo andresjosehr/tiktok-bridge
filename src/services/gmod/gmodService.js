@@ -4,6 +4,9 @@ const Rcon = require('rcon');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
 const ServiceBase = require('../ServiceBase');
+const ttsService = require('../external/ttsService');
+const fs = require('fs');
+const path = require('path');
 
 class GModService extends ServiceBase {
   constructor() {
@@ -219,6 +222,104 @@ class GModService extends ServiceBase {
       like: 'original',
       share: 'pubg'
     };
+
+    // Cargar configuración de TTS
+    this.loadTTSMessages();
+    
+    // Sistema de tracking de milestones
+    this.lastLikeMilestone = 0;
+    this.lastFollowMilestone = 0;
+    this.likeMilestones = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+    this.followMilestones = [1, 5, 10, 25, 50, 100, 250, 500, 1000];
+  }
+
+  loadTTSMessages() {
+    try {
+      const ttsPath = path.join(__dirname, 'gmod-tts.json');
+      this.ttsMessages = JSON.parse(fs.readFileSync(ttsPath, 'utf8'));
+      logger.info('TTS messages loaded successfully');
+    } catch (error) {
+      logger.error('Failed to load TTS messages:', error);
+      this.ttsMessages = {};
+    }
+  }
+
+  getRandomMessage(messageType, data = {}) {
+    const messages = this.ttsMessages[messageType];
+    if (!messages || messages.length === 0) {
+      return null;
+    }
+    
+    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+    
+    // Reemplazar variables en el mensaje
+    let processedMessage = randomMessage;
+    for (const [key, value] of Object.entries(data)) {
+      processedMessage = processedMessage.replace(new RegExp(`{{${key}}}`, 'g'), value);
+    }
+    
+    return processedMessage;
+  }
+
+  async generateAndSendTTS(messageType, data = {}) {
+    if (!config.tts?.enabled || !ttsService.isEnabled()) {
+      logger.debug('TTS is disabled, skipping audio generation');
+      return;
+    }
+
+    const message = this.getRandomMessage(messageType, data);
+    if (!message) {
+      logger.warn(`No TTS message found for type: ${messageType}`);
+      return;
+    }
+
+    try {
+      logger.debug(`Generating TTS for: ${message}`);
+      const ttsResult = await ttsService.generateSpeech(message);
+      
+      if (ttsResult && ttsResult.audioBuffer) {
+        // TODO: Aquí puedes enviar el audio al servidor de GMod
+        // Por ahora solo registramos que se generó exitosamente
+        logger.info(`TTS generated successfully for message: ${message.substring(0, 50)}...`);
+        
+        // Opcionalmente, puedes guardar el archivo de audio temporalmente
+        // o enviarlo directamente al servidor de GMod según tus necesidades
+        
+        return ttsResult;
+      }
+    } catch (error) {
+      logger.error('Failed to generate TTS:', error);
+    }
+  }
+
+  checkLikeMilestone(totalLikes) {
+    for (const milestone of this.likeMilestones) {
+      if (totalLikes >= milestone && this.lastLikeMilestone < milestone) {
+        this.lastLikeMilestone = milestone;
+        this.generateAndSendTTS('like_count_hit', {
+          count: milestone
+        }).catch(error => {
+          logger.error('Failed to generate TTS for like milestone:', error);
+        });
+        return milestone;
+      }
+    }
+    return null;
+  }
+
+  checkFollowMilestone(totalFollows) {
+    for (const milestone of this.followMilestones) {
+      if (totalFollows >= milestone && this.lastFollowMilestone < milestone) {
+        this.lastFollowMilestone = milestone;
+        this.generateAndSendTTS('follow_count_hit', {
+          count: milestone
+        }).catch(error => {
+          logger.error('Failed to generate TTS for follow milestone:', error);
+        });
+        return milestone;
+      }
+    }
+    return null;
   }
 
   async initialize() {
@@ -538,6 +639,15 @@ class GModService extends ServiceBase {
       }
     }
 
+    // Generar TTS para regalo
+    this.generateAndSendTTS('gift', {
+      user: data.user,
+      giftName: data.giftName,
+      cost: data.cost
+    }).catch(error => {
+      logger.error('Failed to generate TTS for gift:', error);
+    });
+
     // Procesar un baile inmediatamente y esperar a que termine
     return await this.processSingleDance('gift', data);
   }
@@ -552,6 +662,13 @@ class GModService extends ServiceBase {
         timestamp: data.timestamp
       });
     }
+
+    // Generar TTS para seguidor
+    this.generateAndSendTTS('follow', {
+      user: data.user
+    }).catch(error => {
+      logger.error('Failed to generate TTS for follow:', error);
+    });
 
     // Procesar un baile inmediatamente y esperar a que termine
     return await this.processSingleDance('follow', data);
@@ -568,6 +685,11 @@ class GModService extends ServiceBase {
         totalLikeCount: data.totalLikeCount,
         timestamp: data.timestamp
       });
+    }
+
+    // Verificar milestone de likes
+    if (data.totalLikeCount) {
+      this.checkLikeMilestone(data.totalLikeCount);
     }
 
     // Procesar un baile inmediatamente y esperar a que termine

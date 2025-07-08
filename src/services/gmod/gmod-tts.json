@@ -1,0 +1,28 @@
+{"like_count_hit": [
+    "¡Wow! Hemos alcanzado {{count}} likes. ¡Gracias a todos!",
+    "¡Ya son {{count}} likes! Esto se está poniendo bueno.",
+    "¡Rompimos la barrera de los {{count}} likes!",
+    "¡{{count}} likes alcanzados! Gracias por el apoyo, gente linda.",
+    "¡{{count}} likes y seguimos creciendo!"
+  ],
+  "follow": [
+    "¡Bienvenido {{user}} a la familia!",
+    "¡Gracias por seguirme, {{user}}!",
+    "¡Un nuevo seguidor se une a la aventura!",
+    "¡{{user}} nos sigue ahora! Bienvenido a bordo.",
+    "¡Seguimos creciendo gracias a {{user}}!"
+  ],
+  "follow_count_hit": [
+    "¡Ya somos {{count}} seguidores! Mil gracias.",
+    "¡Hemos llegado a {{count}} seguidores! No puedo creerlo.",
+    "¡{{count}} personas forman parte de esta comunidad!",
+    "¡{{count}} seguidores y contando! Ustedes son increíbles.",
+    "¡La familia crece! Ahora somos {{count}}."
+  ],
+  "gift": [
+    "¡Wow, gracias por el regalo, {{user}}!",
+    "¡{{user}} acaba de enviar un regalo! ¡Muchas gracias!",
+    "¡Qué detalle, {{user}}! ¡Gracias por el regalo!",
+    "¡Un regalo acaba de llegar cortesía de {{user}}!",
+    "¡Regalo recibido! {{user}}, eres lo máximo."
+  ]}

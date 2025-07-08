@@ -93,8 +93,10 @@ module.exports = {
     elevenlabs: {
       apiKey: process.env.ELEVENLABS_API_KEY,
       defaultVoiceId: process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL',
+      model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
       stability: parseFloat(process.env.ELEVENLABS_STABILITY) || 0.5,
-      similarityBoost: parseFloat(process.env.ELEVENLABS_SIMILARITY_BOOST) || 0.5
+      similarityBoost: parseFloat(process.env.ELEVENLABS_SIMILARITY_BOOST) || 0.5,
+      outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_44100_128'
     },
 
     openai: {

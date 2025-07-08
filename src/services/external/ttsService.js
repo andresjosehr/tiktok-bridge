@@ -37,18 +37,28 @@ class TTSService {
     }
 
     const voiceId = options.voiceId || config.tts.elevenlabs.defaultVoiceId;
+    const model = options.model || config.tts.elevenlabs.model || 'eleven_multilingual_v2';
     const stability = options.stability || config.tts.elevenlabs.stability || 0.5;
     const similarityBoost = options.similarityBoost || config.tts.elevenlabs.similarityBoost || 0.5;
+    const outputFormat = options.outputFormat || config.tts.elevenlabs.outputFormat || 'mp3_44100_128';
+
+    const requestBody = {
+      text: text,
+      model_id: model,
+      voice_settings: {
+        stability: stability,
+        similarity_boost: similarityBoost
+      }
+    };
+
+    // Add output_format to request body if specified
+    if (outputFormat) {
+      requestBody.output_format = outputFormat;
+    }
 
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        text: text,
-        voice_settings: {
-          stability: stability,
-          similarity_boost: similarityBoost
-        }
-      },
+      requestBody,
       {
         headers: {
           'xi-api-key': config.tts.elevenlabs.apiKey,
