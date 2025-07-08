@@ -7,6 +7,9 @@ const ServiceBase = require('../ServiceBase');
 const ttsService = require('../external/ttsService');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const os = require('os');
+const crypto = require('crypto');
 
 class GModService extends ServiceBase {
   constructor() {
@@ -220,7 +223,9 @@ class GModService extends ServiceBase {
       gift: 'fortnite',
       follow: 'mmd',
       like: 'original',
-      share: 'pubg'
+      share: 'pubg',
+      like_count_hit: 'mmd',
+      follow_count_hit: 'original'
     };
 
     // Cargar configuración de TTS
@@ -264,13 +269,13 @@ class GModService extends ServiceBase {
   async generateAndSendTTS(messageType, data = {}) {
     if (!config.tts?.enabled || !ttsService.isEnabled()) {
       logger.debug('TTS is disabled, skipping audio generation');
-      return;
+      return null;
     }
 
     const message = this.getRandomMessage(messageType, data);
     if (!message) {
       logger.warn(`No TTS message found for type: ${messageType}`);
-      return;
+      return null;
     }
 
     try {
@@ -278,17 +283,90 @@ class GModService extends ServiceBase {
       const ttsResult = await ttsService.generateSpeech(message);
       
       if (ttsResult && ttsResult.audioBuffer) {
-        // TODO: Aquí puedes enviar el audio al servidor de GMod
-        // Por ahora solo registramos que se generó exitosamente
         logger.info(`TTS generated successfully for message: ${message.substring(0, 50)}...`);
         
-        // Opcionalmente, puedes guardar el archivo de audio temporalmente
-        // o enviarlo directamente al servidor de GMod según tus necesidades
+        // Guardar el archivo temporalmente para poder obtener su duración
+        const tempDir = os.tmpdir();
+        const tempFileName = `tts_${crypto.randomUUID()}.mp3`;
+        const tempFilePath = path.join(tempDir, tempFileName);
         
-        return ttsResult;
+        fs.writeFileSync(tempFilePath, ttsResult.audioBuffer);
+        
+        // Obtener duración del audio
+        const duration = await this.getAudioDuration(tempFilePath);
+        
+        // Reproducir el audio (esto dependerá de tu sistema de audio)
+        this.playAudio(tempFilePath);
+        
+        // Eliminar archivo temporal después de un tiempo
+        setTimeout(() => {
+          try {
+            fs.unlinkSync(tempFilePath);
+          } catch (error) {
+            logger.warn('Failed to delete temp TTS file:', error);
+          }
+        }, duration + 5000); // 5 segundos extra de margen
+        
+        return {
+          ...ttsResult,
+          duration: duration,
+          message: message,
+          tempFilePath: tempFilePath
+        };
       }
     } catch (error) {
       logger.error('Failed to generate TTS:', error);
+    }
+    
+    return null;
+  }
+
+  async getAudioDuration(filePath) {
+    return new Promise((resolve) => {
+      exec(`ffprobe -v quiet -show_entries format=duration -of csv=p=0 "${filePath}"`, (error, stdout) => {
+        if (error) {
+          logger.warn('Failed to get audio duration, using default:', error);
+          resolve(3000); // 3 segundos por defecto
+        } else {
+          const duration = parseFloat(stdout.trim()) * 1000; // Convertir a milisegundos
+          resolve(Math.max(duration, 1000)); // Mínimo 1 segundo
+        }
+      });
+    });
+  }
+
+  playAudio(filePath) {
+    try {
+      // En Linux/WSL puedes usar aplay, paplay, o mpg123
+      // En Windows puedes usar cmdmp3
+      // En macOS puedes usar afplay
+      
+      const platform = process.platform;
+      let command;
+      
+      if (platform === 'linux') {
+        // Intentar mpg123 primero, luego aplay
+        command = `mpg123 -q "${filePath}" || aplay "${filePath}" || paplay "${filePath}"`;
+      } else if (platform === 'darwin') {
+        // macOS
+        command = `afplay "${filePath}"`;
+      } else if (platform === 'win32') {
+        // Windows
+        command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
+      } else {
+        logger.warn('Unsupported platform for audio playback:', platform);
+        return;
+      }
+      
+      exec(command, (error) => {
+        if (error) {
+          logger.warn('Failed to play audio:', error.message);
+        } else {
+          logger.debug('Audio playback started');
+        }
+      });
+    } catch (error) {
+      logger.error('Error in audio playback:', error);
     }
   }
 
@@ -296,10 +374,10 @@ class GModService extends ServiceBase {
     for (const milestone of this.likeMilestones) {
       if (totalLikes >= milestone && this.lastLikeMilestone < milestone) {
         this.lastLikeMilestone = milestone;
-        this.generateAndSendTTS('like_count_hit', {
+        this.processSingleDanceWithTTS('like_count_hit', {
           count: milestone
         }).catch(error => {
-          logger.error('Failed to generate TTS for like milestone:', error);
+          logger.error('Failed to generate TTS + dance for like milestone:', error);
         });
         return milestone;
       }
@@ -311,10 +389,10 @@ class GModService extends ServiceBase {
     for (const milestone of this.followMilestones) {
       if (totalFollows >= milestone && this.lastFollowMilestone < milestone) {
         this.lastFollowMilestone = milestone;
-        this.generateAndSendTTS('follow_count_hit', {
+        this.processSingleDanceWithTTS('follow_count_hit', {
           count: milestone
         }).catch(error => {
-          logger.error('Failed to generate TTS for follow milestone:', error);
+          logger.error('Failed to generate TTS + dance for follow milestone:', error);
         });
         return milestone;
       }
@@ -610,8 +688,8 @@ class GModService extends ServiceBase {
       }
     }
 
-    // Procesar un baile inmediatamente y esperar a que termine
-    return await this.processSingleDance('chat', data);
+    // Procesar baile con TTS sincronizado si está configurado
+    return await this.processSingleDanceWithTTS('chat', data);
   }
 
   async handleTikTokGift(data) {
@@ -639,17 +717,8 @@ class GModService extends ServiceBase {
       }
     }
 
-    // Generar TTS para regalo
-    this.generateAndSendTTS('gift', {
-      user: data.user,
-      giftName: data.giftName,
-      cost: data.cost
-    }).catch(error => {
-      logger.error('Failed to generate TTS for gift:', error);
-    });
-
-    // Procesar un baile inmediatamente y esperar a que termine
-    return await this.processSingleDance('gift', data);
+    // Procesar baile con TTS sincronizado si está configurado
+    return await this.processSingleDanceWithTTS('gift', data);
   }
 
   async handleTikTokFollow(data) {
@@ -663,15 +732,8 @@ class GModService extends ServiceBase {
       });
     }
 
-    // Generar TTS para seguidor
-    this.generateAndSendTTS('follow', {
-      user: data.user
-    }).catch(error => {
-      logger.error('Failed to generate TTS for follow:', error);
-    });
-
-    // Procesar un baile inmediatamente y esperar a que termine
-    return await this.processSingleDance('follow', data);
+    // Procesar baile con TTS sincronizado si está configurado
+    return await this.processSingleDanceWithTTS('follow', data);
   }
 
   async handleTikTokLike(data) {
@@ -692,8 +754,8 @@ class GModService extends ServiceBase {
       this.checkLikeMilestone(data.totalLikeCount);
     }
 
-    // Procesar un baile inmediatamente y esperar a que termine
-    return await this.processSingleDance('like', data);
+    // Procesar baile con TTS sincronizado si está configurado
+    return await this.processSingleDanceWithTTS('like', data);
   }
 
   async handleTikTokShare(data) {
@@ -707,8 +769,8 @@ class GModService extends ServiceBase {
       });
     }
 
-    // Procesar un baile inmediatamente y esperar a que termine
-    return await this.processSingleDance('share', data);
+    // Procesar baile con TTS sincronizado si está configurado
+    return await this.processSingleDanceWithTTS('share', data);
   }
 
   async handleViewerCount(data) {
@@ -857,6 +919,113 @@ class GModService extends ServiceBase {
       }
     } catch (error) {
       logger.error(`Error executing dance ${dance}:`, error);
+      this.isDancing = false;
+      return false;
+    }
+  }
+
+  // Nueva función que integra TTS con bailes sincronizados
+  async processSingleDanceWithTTS(eventType, data) {
+    // Verificar si ya estamos bailando
+    if (this.isDancing) {
+      logger.info(`⏸️ Skipping ${eventType} event - already dancing`);
+      const skipError = new Error('Event skipped - already dancing');
+      skipError.isSkipped = true;
+      throw skipError;
+    }
+
+    // Verificar si el evento tiene mensajes TTS configurados
+    const hasTTSMessage = this.ttsMessages[eventType] && this.ttsMessages[eventType].length > 0;
+    
+    if (!hasTTSMessage) {
+      logger.warn(`No TTS message configured for event type: ${eventType}, using normal dance`);
+      return await this.processSingleDance(eventType, data);
+    }
+
+    const category = this.eventDanceMapping[eventType];
+    if (!category) {
+      logger.warn(`No dance category mapped for event type: ${eventType}`);
+      return false;
+    }
+
+    const dance = this.getRandomDance(category);
+    if (!dance) {
+      logger.warn(`No dances available for category: ${category}`);
+      return false;
+    }
+
+    logger.info(`Starting TTS + dance sequence for event: ${eventType}`);
+    
+    // Marcar como bailando
+    this.isDancing = true;
+    
+    try {
+      // PASO 1: Generar TTS primero
+      const ttsResult = await this.generateAndSendTTS(eventType, data);
+      
+      if (!ttsResult) {
+        logger.warn('TTS generation failed, proceeding with dance only');
+        // Si falla TTS, continuar solo con el baile usando duración por defecto
+        const success = await this.executeDance({ dance, eventType, data, timestamp: Date.now() });
+        
+        if (success) {
+          await new Promise(resolve => {
+            this.currentDanceTimer = setTimeout(() => {
+              this.isDancing = false;
+              this.currentDanceTimer = null;
+              logger.info(`Dance completed (no TTS): ${dance}`);
+              resolve();
+            }, this.danceTimeout);
+          });
+          return true;
+        } else {
+          this.isDancing = false;
+          return false;
+        }
+      }
+
+      // PASO 2: Ejecutar el baile al mismo tiempo que se reproduce el TTS
+      logger.info(`Starting synchronized TTS + dance: ${dance} (duration: ${ttsResult.duration}ms)`);
+      
+      const danceItem = {
+        dance,
+        eventType,
+        data,
+        timestamp: Date.now(),
+        ttsMessage: ttsResult.message
+      };
+
+      // Ejecutar el baile inmediatamente después de que comience el TTS
+      const danceSuccess = await this.executeDance(danceItem);
+      
+      if (danceSuccess) {
+        // PASO 3: Esperar a que termine el audio TTS para detener el baile
+        await new Promise(resolve => {
+          this.currentDanceTimer = setTimeout(() => {
+            // Detener el baile cuando termine el audio
+            this.stopCurrentDance();
+            this.isDancing = false;
+            this.currentDanceTimer = null;
+            logger.info(`TTS + Dance sequence completed: ${dance} (${ttsResult.duration}ms)`);
+            resolve();
+          }, ttsResult.duration);
+        });
+        return true;
+      } else {
+        logger.error('Failed to execute dance, but TTS is playing');
+        // Aunque el baile falle, esperar a que termine el TTS
+        await new Promise(resolve => {
+          setTimeout(() => {
+            this.isDancing = false;
+            logger.info('TTS completed (dance failed)');
+            resolve();
+          }, ttsResult.duration);
+        });
+        return false;
+      }
+      
+    } catch (error) {
+      logger.error(`Error in TTS + dance sequence:`, error);
       this.isDancing = false;
       return false;
     }

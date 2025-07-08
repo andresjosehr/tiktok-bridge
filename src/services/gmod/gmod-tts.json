@@ -25,4 +25,11 @@
     "¡Qué detalle, {{user}}! ¡Gracias por el regalo!",
     "¡Un regalo acaba de llegar cortesía de {{user}}!",
     "¡Regalo recibido! {{user}}, eres lo máximo."
+  ],
+  "chat": [
+    "¡Hola {{user}}! ¡Gracias por el mensaje!",
+    "¡{{user}} dice algo interesante!",
+    "¡Gracias por escribir, {{user}}!",
+    "¡{{user}} está aquí con nosotros!",
+    "¡Qué bueno verte, {{user}}!"
   ]}
