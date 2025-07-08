@@ -1,0 +1,492 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Modular TTS message system with reusable audio parts",
+    "audio_cache_directory": "./audio_cache",
+    "username_tts_enabled": true,
+    "part_audio_cache_enabled": true
+  },
+  "follow": {
+    "parts": {
+      "openers": [
+        "¡Boom!",
+        "¡Qué crack!",
+        "¡Golazo!",
+        "¡Wow!",
+        "¡Grande!",
+        "¡Alerta!",
+        "¡Oye!",
+        "¡Ey!",
+        "¡Qué honor!",
+        "¡Bien jugado!",
+        "¡Punto para!",
+        "¡Fuego!",
+        "¡Arranque total!",
+        "¡Qué fichaje!",
+        "¡Chapeau!",
+        "¡Tremendo!"
+      ],
+      "connectors": [
+        "",
+        "prepárate,",
+        "atento,",
+        "escucha,",
+        "mira,",
+        "ahora,"
+      ],
+      "actions": [
+        "gracias por sumarte al caos",
+        "tu follow me da vida. Gracias por ser parte de la tribu",
+        "ahora eres parte de mi pandilla virtual",
+        "gracias por unirte a esta locura organizada",
+        "te doy las gracias por seguirme y un pase VIP a la diversión",
+        "gracias por sumarte a esta revolución digital",
+        "tu follow es como un café mañanero: puro amor. Gracias",
+        "se unió al equipo. Gracias por la confianza, crack",
+        "gracias por seguirme, ahora somos compinches en esta aventura",
+        "gracias por sumarte a mi mundo sin filtros",
+        "gracias por seguirme! Prepárate para un viaje sin frenos",
+        "gracias por el follow. Ahora eres parte de mi pandilla virtual",
+        "gracias por sumarte al equipo de los imparables",
+        "tu follow es mi nueva medalla de honor. Mil gracias",
+        "gracias por seguirme y subirte a este tren",
+        "gracias por el follow. Ahora somos socios en esta travesura",
+        "gracias por seguirme y darle gas a esta movida",
+        "tu follow es como un aplauso en mi show. Gracias totales",
+        "gracias por sumarte a mi esquina del internet",
+        "gracias por el follow. Ahora eres parte del equipo estelar",
+        "gracias por seguirme y encender esta chispa",
+        "tu follow es mi nuevo trofeo. Gracias por la buena onda",
+        "gracias por seguirme y unirte al descontrol",
+        "gracias por el follow. Esto es el comienzo de algo legendario",
+        "gracias por sumarte a mi squad digital",
+        "tu follow me pone a mil. Gracias por ser parte del juego",
+        "gracias por seguirme y darle vida a esta fiesta",
+        "gracias por el follow. Ahora eres de los míos, bienvenido",
+        "gracias por seguirme y meterle pila a esta aventura"
+      ],
+      "closings": [
+        "¡Esto va a ser épico!",
+        "Dale gas a la aventura.",
+        "Bienvenido a la fiesta.",
+        "¡Vamos con todo!",
+        "¡Que empiece el show!",
+        "¡A romperla!",
+        "¡Aquí vamos!",
+        "¡Pura diversión!",
+        "¡Sin límites!",
+        "¡Vamos a hacer historia!"
+      ]
+    },
+    "structures": [
+      ["opener", "username", "connector", "action", "closing"],
+      ["opener", "username", "action", "closing"],
+      ["username", "action", "closing"],
+      ["opener", "username", "action"],
+      ["username", "connector", "action", "closing"]
+    ],
+    "weights": {
+      "structures": [30, 25, 20, 15, 10]
+    }
+  },
+  "gift": {
+    "gifts": {
+      "rosa": {
+        "parts": {
+          "openers": [
+            "¡Wow!",
+            "¡Qué hermoso!",
+            "¡Una rosa!",
+            "¡Qué romántico!",
+            "¡Increíble!",
+            "¡Precioso!",
+            "¡Qué detalle tan lindo!"
+          ],
+          "connectors": [
+            "",
+            "mira,",
+            "fíjate,",
+            "qué hermoso,"
+          ],
+          "actions": [
+            "me ha enviado una rosa preciosa",
+            "acaba de regalarme una rosa! ¡Qué detalle!",
+            "qué gesto tan bonito, una rosa para mí",
+            "una rosa hermosa acaba de llegar de",
+            "me has enamorado con esa rosa",
+            "tu rosa me llena el corazón",
+            "gracias por esa rosa tan bella",
+            "esa rosa es pura ternura",
+            "me has hecho sonreír con esa rosa"
+          ],
+          "closings": [
+            "¡Eres un amor!",
+            "¡Qué romántico!",
+            "¡Me encanta!",
+            "¡Eres muy detallista!",
+            "¡Qué bella rosa!",
+            "¡Gracias por la belleza!",
+            "¡Eres un sol!"
+          ]
+        },
+        "structures": [
+          ["opener", "username", "connector", "action", "closing"],
+          ["opener", "username", "action", "closing"],
+          ["username", "action", "closing"],
+          ["opener", "action", "username", "closing"]
+        ],
+        "weights": {
+          "structures": [35, 30, 25, 10]
+        }
+      },
+      "corazon_coreano": {
+        "parts": {
+          "openers": [
+            "¡Aww!",
+            "¡Qué tierno!",
+            "¡Un corazón!",
+            "¡Saranghae!",
+            "¡Qué amor!",
+            "¡Kyaa!",
+            "¡Oppa!"
+          ],
+          "connectors": [
+            "",
+            "mira,",
+            "qué lindo,",
+            "saranghae,"
+          ],
+          "actions": [
+            "me ha enviado un corazón coreano! ¡Kyaa!",
+            "acaba de mandarme amor coreano",
+            "qué tierno corazón coreano de",
+            "un corazón lleno de amor coreano de",
+            "me has conquistado con ese corazón coreano",
+            "tu corazón coreano me derrite",
+            "gracias por ese amor tan kawaii",
+            "ese corazón coreano es puro amor",
+            "me has hecho sentir especial con tu corazón"
+          ],
+          "closings": [
+            "¡Saranghae!",
+            "¡Qué kawaii!",
+            "¡Eres mi oppa!",
+            "¡Kyaa, gracias!",
+            "¡Amor coreano!",
+            "¡Eres daebak!",
+            "¡Fighting!"
+          ]
+        },
+        "structures": [
+          ["opener", "username", "connector", "action", "closing"],
+          ["opener", "username", "action", "closing"],
+          ["username", "action", "closing"],
+          ["opener", "action", "username", "closing"]
+        ],
+        "weights": {
+          "structures": [35, 30, 25, 10]
+        }
+      },
+      "default": {
+        "parts": {
+          "openers": [
+            "¡Wow!",
+            "¡Increíble!",
+            "¡Qué detalle!",
+            "¡Genial!",
+            "¡Espectacular!",
+            "¡Brutal!",
+            "¡Perfecto!"
+          ],
+          "connectors": [
+            "",
+            "mira,",
+            "escucha,",
+            "atento,"
+          ],
+          "actions": [
+            "gracias por el regalo",
+            "acaba de enviar un regalo! ¡Muchas gracias!",
+            "qué detalle! ¡Gracias por el regalo!",
+            "un regalo acaba de llegar cortesía de",
+            "eres lo máximo por el regalo",
+            "me has hecho el día con ese regalo",
+            "tu regalo me llena de energía",
+            "gracias por ser tan generoso",
+            "ese regalo es pura magia"
+          ],
+          "closings": [
+            "¡Eres increíble!",
+            "¡Mil gracias!",
+            "¡Te lo agradezco un montón!",
+            "¡Eres lo máximo!",
+            "¡Qué buena onda!",
+            "¡Gracias totales!"
+          ]
+        },
+        "structures": [
+          ["opener", "username", "connector", "action", "closing"],
+          ["opener", "username", "action", "closing"],
+          ["username", "action", "closing"],
+          ["opener", "action", "username", "closing"]
+        ],
+        "weights": {
+          "structures": [35, 30, 25, 10]
+        }
+      }
+    }
+  },
+  "chat": {
+    "parts": {
+      "openers": [
+        "¡Hola!",
+        "¡Ey!",
+        "¡Qué tal!",
+        "¡Buenas!",
+        "¡Saludos!",
+        "¡Hola ahí!"
+      ],
+      "connectors": [
+        "",
+        "escucha,",
+        "mira,",
+        "oye,"
+      ],
+      "actions": [
+        "gracias por el mensaje",
+        "dice algo interesante",
+        "gracias por escribir",
+        "está aquí con nosotros",
+        "qué bueno verte por aquí",
+        "siempre es un placer leerte",
+        "gracias por participar",
+        "tu mensaje alegra el chat"
+      ],
+      "closings": [
+        "¡Gracias por participar!",
+        "¡Qué buena onda!",
+        "¡Sigue así!",
+        "¡Gracias por estar!",
+        "¡Eres genial!"
+      ]
+    },
+    "structures": [
+      ["opener", "username", "connector", "action", "closing"],
+      ["opener", "username", "action"],
+      ["username", "action", "closing"],
+      ["opener", "username", "closing"]
+    ],
+    "weights": {
+      "structures": [25, 35, 25, 15]
+    }
+  },
+  "like": {
+    "parts": {
+      "openers": [
+        "¡Genial!",
+        "¡Perfecto!",
+        "¡Buenísimo!",
+        "¡Súper!",
+        "¡Excelente!"
+      ],
+      "connectors": [
+        "",
+        "mira,",
+        "fíjate,"
+      ],
+      "actions": [
+        "acaba de dar un like",
+        "le gustó algo",
+        "acaba de reaccionar",
+        "mostró su apoyo",
+        "dejó su like",
+        "reaccionó positivamente"
+      ],
+      "closings": [
+        "¡Gracias por el apoyo!",
+        "¡Qué buena vibra!",
+        "¡Gracias por la buena onda!",
+        "¡Eres increíble!"
+      ]
+    },
+    "structures": [
+      ["opener", "username", "action", "closing"],
+      ["username", "action", "closing"],
+      ["opener", "username", "action"],
+      ["username", "action"]
+    ],
+    "weights": {
+      "structures": [30, 35, 20, 15]
+    }
+  },
+  "share": {
+    "parts": {
+      "openers": [
+        "¡Increíble!",
+        "¡Qué bueno!",
+        "¡Genial!",
+        "¡Perfecto!",
+        "¡Excelente!"
+      ],
+      "connectors": [
+        "",
+        "mira,",
+        "fíjate,"
+      ],
+      "actions": [
+        "acaba de compartir algo",
+        "compartió contenido",
+        "está compartiendo",
+        "difundió algo interesante",
+        "acaba de hacer share",
+        "compartió algo genial"
+      ],
+      "closings": [
+        "¡Gracias por compartir!",
+        "¡Qué buena onda!",
+        "¡Gracias por difundir!",
+        "¡Eres increíble!",
+        "¡Gracias por el apoyo!"
+      ]
+    },
+    "structures": [
+      ["opener", "username", "action", "closing"],
+      ["username", "action", "closing"],
+      ["opener", "username", "action"],
+      ["username", "action"]
+    ],
+    "weights": {
+      "structures": [35, 30, 20, 15]
+    }
+  },
+  "social": {
+    "parts": {
+      "openers": [
+        "¡Atención!",
+        "¡Miren!",
+        "¡Genial!",
+        "¡Increíble!",
+        "¡Perfecto!"
+      ],
+      "connectors": [
+        "",
+        "atento,",
+        "mira,",
+        "fíjate,"
+      ],
+      "actions": [
+        "acaba de interactuar",
+        "está activo en redes",
+        "acaba de hacer algo interesante",
+        "está compartiendo buena energía",
+        "acaba de conectar",
+        "está participando activamente"
+      ],
+      "closings": [
+        "¡Qué buena vibra!",
+        "¡Gracias por la interacción!",
+        "¡Sigue así!",
+        "¡Eres genial!",
+        "¡Gracias por participar!"
+      ]
+    },
+    "structures": [
+      ["opener", "username", "action", "closing"],
+      ["username", "action", "closing"],
+      ["opener", "username", "action"],
+      ["username", "action"]
+    ],
+    "weights": {
+      "structures": [30, 35, 20, 15]
+    }
+  },
+  "like_count_hit": {
+    "parts": {
+      "openers": [
+        "¡Wow!",
+        "¡Increíble!",
+        "¡Genial!",
+        "¡Fantástico!",
+        "¡Espectacular!",
+        "¡Brutal!"
+      ],
+      "connectors": [
+        "",
+        "miren,",
+        "atención,",
+        "fíjense,"
+      ],
+      "actions": [
+        "hemos alcanzado {{count}} likes",
+        "ya son {{count}} likes",
+        "rompimos la barrera de los {{count}} likes",
+        "{{count}} likes alcanzados",
+        "{{count}} likes y seguimos creciendo",
+        "llegamos a {{count}} likes",
+        "{{count}} likes de pura buena vibra"
+      ],
+      "closings": [
+        "¡Gracias a todos!",
+        "¡Esto se está poniendo bueno!",
+        "¡Gracias por el apoyo, gente linda!",
+        "¡Ustedes son increíbles!",
+        "¡Vamos por más!",
+        "¡Qué comunidad tan genial!"
+      ]
+    },
+    "structures": [
+      ["opener", "connector", "action", "closing"],
+      ["opener", "action", "closing"],
+      ["action", "closing"],
+      ["opener", "action"]
+    ],
+    "weights": {
+      "structures": [40, 30, 20, 10]
+    }
+  },
+  "follow_count_hit": {
+    "parts": {
+      "openers": [
+        "¡Increíble!",
+        "¡Wow!",
+        "¡Genial!",
+        "¡Fantástico!",
+        "¡Espectacular!",
+        "¡No puedo creerlo!"
+      ],
+      "connectors": [
+        "",
+        "miren,",
+        "atención,",
+        "fíjense,"
+      ],
+      "actions": [
+        "ya somos {{count}} seguidores",
+        "hemos llegado a {{count}} seguidores",
+        "{{count}} personas forman parte de esta comunidad",
+        "{{count}} seguidores y contando",
+        "la familia crece! Ahora somos {{count}}",
+        "{{count}} seguidores de pura buena vibra",
+        "{{count}} miembros en esta familia digital"
+      ],
+      "closings": [
+        "¡Mil gracias!",
+        "¡No puedo creerlo!",
+        "¡Ustedes son increíbles!",
+        "¡Gracias por formar parte!",
+        "¡Vamos por más!",
+        "¡Qué comunidad tan genial!",
+        "¡Los amo a todos!"
+      ]
+    },
+    "structures": [
+      ["opener", "connector", "action", "closing"],
+      ["opener", "action", "closing"],
+      ["action", "closing"],
+      ["opener", "action"]
+    ],
+    "weights": {
+      "structures": [40, 30, 20, 10]
+    }
+  }
+}

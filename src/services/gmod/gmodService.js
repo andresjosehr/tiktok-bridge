@@ -4,12 +4,8 @@ const Rcon = require('rcon');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
 const ServiceBase = require('../ServiceBase');
-const ttsService = require('../external/ttsService');
-const fs = require('fs');
-const path = require('path');
+const ModularTTSService = require('./modularTTSService');
 const { exec } = require('child_process');
-const os = require('os');
-const crypto = require('crypto');
 
 class GModService extends ServiceBase {
   constructor() {
@@ -228,8 +224,12 @@ class GModService extends ServiceBase {
       follow_count_hit: 'original'
     };
 
-    // Cargar configuración de TTS
-    this.loadTTSMessages();
+    // Inicializar servicio TTS modular
+    this.modularTTS = new ModularTTSService({
+      enableCache: true,
+      onlyUsernamesInTTS: true,
+      tempDirectory: './temp_audio_gmod'
+    });
     
     // Sistema de tracking de milestones
     this.lastLikeMilestone = 0;
@@ -238,88 +238,73 @@ class GModService extends ServiceBase {
     this.followMilestones = [1, 5, 10, 25, 50, 100, 250, 500, 1000];
   }
 
-  loadTTSMessages() {
-    try {
-      const ttsPath = path.join(__dirname, 'gmod-tts.json');
-      this.ttsMessages = JSON.parse(fs.readFileSync(ttsPath, 'utf8'));
-      logger.info('TTS messages loaded successfully');
-    } catch (error) {
-      logger.error('Failed to load TTS messages:', error);
-      this.ttsMessages = {};
-    }
-  }
-
-  getRandomMessage(messageType, data = {}) {
-    const messages = this.ttsMessages[messageType];
-    if (!messages || messages.length === 0) {
-      return null;
-    }
-    
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    
-    // Reemplazar variables en el mensaje
-    let processedMessage = randomMessage;
-    for (const [key, value] of Object.entries(data)) {
-      processedMessage = processedMessage.replace(new RegExp(`{{${key}}}`, 'g'), value);
-    }
-    
-    return processedMessage;
-  }
 
   async generateAndSendTTS(messageType, data = {}) {
-    if (!config.tts?.enabled || !ttsService.isEnabled()) {
+    if (!config.tts?.enabled) {
       logger.debug('TTS is disabled, skipping audio generation');
       return null;
     }
 
-    const message = this.getRandomMessage(messageType, data);
-    if (!message) {
-      logger.warn(`No TTS message found for type: ${messageType}`);
-      return null;
-    }
-
     try {
-      logger.debug(`Generating TTS for: ${message}`);
-      const ttsResult = await ttsService.generateSpeech(message);
-      
-      if (ttsResult && ttsResult.audioBuffer) {
-        logger.info(`TTS generated successfully for message: ${message.substring(0, 50)}...`);
-        
-        // Guardar el archivo temporalmente para poder obtener su duración
-        const tempDir = os.tmpdir();
-        const tempFileName = `tts_${crypto.randomUUID()}.mp3`;
-        const tempFilePath = path.join(tempDir, tempFileName);
-        
-        fs.writeFileSync(tempFilePath, ttsResult.audioBuffer);
-        
-        // Obtener duración del audio
-        const duration = await this.getAudioDuration(tempFilePath);
-        
-        // Reproducir el audio (esto dependerá de tu sistema de audio)
-        this.playAudio(tempFilePath);
-        
-        // Eliminar archivo temporal después de un tiempo
-        setTimeout(() => {
-          try {
-            fs.unlinkSync(tempFilePath);
-          } catch (error) {
-            logger.warn('Failed to delete temp TTS file:', error);
-          }
-        }, duration + 5000); // 5 segundos extra de margen
-        
-        return {
-          ...ttsResult,
-          duration: duration,
-          message: message,
-          tempFilePath: tempFilePath
-        };
-      }
+      logger.debug(`Generating modular TTS for: ${messageType}`);
+      return await this.generateModularTTS(messageType, data);
     } catch (error) {
       logger.error('Failed to generate TTS:', error);
+      return null;
     }
-    
-    return null;
   }
+
+  async generateModularTTS(messageType, data = {}) {
+    try {
+      const audioInfo = await this.modularTTS.generateMessageAudio(messageType, data);
+      
+      if (!audioInfo || !audioInfo.audioFiles || audioInfo.audioFiles.length === 0) {
+        logger.warn(`No modular TTS audio generated for type: ${messageType}`);
+        return null;
+      }
+
+      // For now, we'll combine all audio files or use the main one
+      let mainAudioPath = null;
+      let totalDuration = 0;
+
+      if (audioInfo.fullAudioPath) {
+        // Single combined audio file
+        mainAudioPath = audioInfo.fullAudioPath;
+        totalDuration = await this.getAudioDuration(mainAudioPath);
+      } else if (audioInfo.dynamicAudio) {
+        // Use the dynamic username audio for now (could be enhanced to combine all parts)
+        mainAudioPath = audioInfo.dynamicAudio;
+        totalDuration = await this.getAudioDuration(mainAudioPath);
+      } else if (audioInfo.audioFiles.length > 0) {
+        // Use the first available audio file
+        mainAudioPath = audioInfo.audioFiles[0].audioPath;
+        totalDuration = await this.getAudioDuration(mainAudioPath);
+      }
+
+      if (!mainAudioPath) {
+        logger.warn('No valid audio path found in modular TTS result');
+        return null;
+      }
+
+      // Play the audio
+      this.playAudio(mainAudioPath);
+
+      logger.info(`Modular TTS generated successfully: ${audioInfo.message.fullText.substring(0, 50)}...`);
+
+      return {
+        audioBuffer: null, // Not needed since we have file path
+        duration: totalDuration,
+        message: audioInfo.message.fullText,
+        tempFilePath: mainAudioPath,
+        modular: true,
+        audioInfo: audioInfo
+      };
+    } catch (error) {
+      logger.error('Failed to generate modular TTS:', error);
+      return null;
+    }
+  }
+
 
   async getAudioDuration(filePath) {
     return new Promise((resolve) => {
@@ -873,11 +858,16 @@ class GModService extends ServiceBase {
       throw skipError;
     }
 
-    // Verificar si el evento tiene mensajes TTS configurados
-    const hasTTSMessage = this.ttsMessages[eventType] && this.ttsMessages[eventType].length > 0;
-    
-    if (!hasTTSMessage) {
-      logger.warn(`No TTS message configured for event type: ${eventType}, skipping dance`);
+    // Verificar si el sistema modular puede generar mensajes para este evento
+    if (!this.modularTTS || !this.modularTTS.messageComposer) {
+      logger.warn(`Modular TTS not available, skipping dance for event: ${eventType}`);
+      return false;
+    }
+
+    // Verificar si el tipo de evento está configurado en el sistema modular
+    const eventTypes = this.modularTTS.messageComposer.getEventTypes();
+    if (!eventTypes.includes(eventType)) {
+      logger.warn(`Event type ${eventType} not configured in modular TTS, skipping dance`);
       return false;
     }
 

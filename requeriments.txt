@@ -1,0 +1,67 @@
+Estoy creando un sistema de mensajes de agradecimiento por eventos en redes sociales (por ejemplo, cuando alguien me sigue en TikTok). Cada mensaje será reproducido mediante TTS (Text to Speech) o audios pregrabados.
+
+🎯 Mi objetivo es reducir el coste y la latencia del TTS.
+Por eso quiero dividir cada mensaje en partes reutilizables, de modo que solo el nombre del usuario se tenga que generar dinámicamente por TTS, y el resto sean audios pregrabados que puedan combinarse.
+
+El archivo en el que estan los mensajes es gmod-tts.json
+Se tiene que seguir segmentando por follow, gift, like, share, chat, social, like_count_hit, follow_count_hit
+
+✔️ Lo que quiero lograr:
+Que cada mensaje esté compuesto por diferentes partes (por ejemplo: expresión inicial, conector, mensaje principal, cierre).
+
+Que estas partes estén organizadas en un archivo JSON y sean intercambiables.
+
+Que cuando el sistema lea el JSON, pueda combinar las diferentes partes aleatoriamente y generar el mensaje final.
+
+Solo el nombre del usuario debe generarse siempre por TTS, el resto deben ser audios pregrabados que solo se generan la primera vez y se reutilizan después.
+
+Si se agrega una nueva frase a alguna parte del mensaje en el JSON, el sistema debe generar el audio de esa nueva frase la primera vez que la use, y luego reutilizarlo.
+
+⚙️ Estructura propuesta (me puedes sugerir una mejor si crees que hay algo que optimizar):
+json
+Copiar
+Editar
+{
+  "follow": {
+    "parts": {
+      "openers": [
+        "¡Boom!",
+        "¡Qué crack!",
+        "¡Golazo!"
+      ],
+      "connectors": [
+        "",
+        "Prepárate,",
+        "Atento,"
+      ],
+      "actions": [
+        "gracias por sumarte al caos",
+        "tu follow me da vida. Gracias por ser parte de la tribu",
+        "ahora eres parte de mi pandilla virtual"
+      ],
+      "closings": [
+        "¡Esto va a ser épico!",
+        "Dale gas a la aventura.",
+        "Bienvenido a la fiesta."
+      ]
+    },
+    "structure": [
+      ["opener", "username", "connector", "action", "closing"]
+    ]
+  }
+}
+🔍 ¿Qué espero que me propongas?
+✔️ Una estructura JSON clara, flexible y modular que me permita:
+
+Combinar las partes del mensaje aleatoriamente.
+
+Definir el orden de las partes (por ejemplo, algunas veces podría querer que el "closing" vaya antes que el "action").
+
+Agregar nuevas partes en el futuro sin romper el funcionamiento actual.
+
+✔️ Opcional: sugerencias para que el sistema detecte si el audio de cada parte ya existe, y si no, que lo genere y lo almacene.
+
+➡️ Importante: Solo el nombre del usuario (username) debe ser generado siempre por TTS.
+Las demás partes deben reutilizarse mediante audios pregrabados para optimizar recursos.
+
+¿Puedes generar el JSON inicial con algunas frases y sugerirme una estructura que funcione bien para este propósito? También puedes proponer si crees que hay más categorías de partes que deberían existir (por ejemplo, un tono emocional, o un saludo extra).
