@@ -6,7 +6,8 @@ class QueueProcessorBase {
   constructor() {
     this.isProcessing = false;
     this.processingInterval = null;
-    this.batchSize = config.queue.batchSize || 1;
+    this.currentJobInProgress = false; // Para evitar tomar más trabajos mientras uno está en progreso
+    this.batchSize = 1; // Siempre procesar de uno en uno
     this.processingDelay = config.queue.processingDelay || 500;
     this.maxRetryDelay = config.queue.maxRetryDelay || 300;
     this.eventHandlers = new Map();
@@ -59,37 +60,38 @@ class QueueProcessorBase {
       return;
     }
 
+    // Si ya hay un trabajo en progreso, no buscar más
+    if (this.currentJobInProgress) {
+      return;
+    }
+
     try {
-      const jobs = await this.getNextJobs();
+      // Obtener solo UN trabajo
+      const job = await this.getNextJob();
       
-      if (jobs.length === 0) {
+      if (!job) {
         return;
       }
 
-      logger.info(`${this.name} processing batch of ${jobs.length} jobs`);
+      logger.info(`${this.name} processing job ${job.id}: ${job.event_type}`);
       
-      for (const job of jobs) {
-        await this.processJob(job);
-      }
+      // Marcar que hay un trabajo en progreso
+      this.currentJobInProgress = true;
+      
+      // Procesar el trabajo y esperar a que termine completamente
+      await this.processJob(job);
+      
+      // Marcar que el trabajo terminó
+      this.currentJobInProgress = false;
     } catch (error) {
-      logger.error(`Error processing batch in ${this.name}:`, error);
+      logger.error(`Error processing job in ${this.name}:`, error);
+      this.currentJobInProgress = false; // Asegurar que se libere en caso de error
     }
   }
 
-  async getNextJobs() {
-    const jobs = [];
-    
-    for (let i = 0; i < this.batchSize; i++) {
-      const EventQueue = orm.getModel('EventQueue');
-      const job = await EventQueue.findAndClaimNextJob();
-      if (job) {
-        jobs.push(job);
-      } else {
-        break;
-      }
-    }
-    
-    return jobs;
+  async getNextJob() {
+    const EventQueue = orm.getModel('EventQueue');
+    return await EventQueue.findAndClaimNextJob();
   }
 
   async processJob(job) {
@@ -118,13 +120,23 @@ class QueueProcessorBase {
     } catch (error) {
       const executionTime = Date.now() - startTime;
       
-      logger.error(`${this.name} job ${job.id} failed:`, error);
-      
-      const retryDelay = this.calculateRetryDelay(job.attempts);
-      await job.markAsFailed(retryDelay);
-      
-      const EventLog = orm.getModel('EventLog');
-      await EventLog.createLog(job.id, job.event_type, job.event_data, 'failed', error.message, executionTime);
+      // Si el error es de tipo "skipped", marcar como completado en lugar de fallido
+      if (error.isSkipped) {
+        logger.debug(`${this.name} job ${job.id} skipped: ${error.message}`);
+        
+        await job.markAsCompleted();
+        
+        const EventLog = orm.getModel('EventLog');
+        await EventLog.createLog(job.id, job.event_type, job.event_data, 'skipped', error.message, executionTime);
+      } else {
+        logger.error(`${this.name} job ${job.id} failed:`, error);
+        
+        const retryDelay = this.calculateRetryDelay(job.attempts);
+        await job.markAsFailed(retryDelay);
+        
+        const EventLog = orm.getModel('EventLog');
+        await EventLog.createLog(job.id, job.event_type, job.event_data, 'failed', error.message, executionTime);
+      }
     }
   }
 

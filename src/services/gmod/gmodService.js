@@ -509,8 +509,8 @@ class GModService {
       }
     }
 
-    // Agregar baile a la cola por evento de chat
-    this.addDanceToQueue('chat', data);
+    // Procesar un baile inmediatamente y esperar a que termine
+    return await this.processSingleDance('chat', data);
   }
 
   async handleTikTokGift(data) {
@@ -538,8 +538,8 @@ class GModService {
       }
     }
 
-    // Agregar baile a la cola por evento de regalo
-    this.addDanceToQueue('gift', data);
+    // Procesar un baile inmediatamente y esperar a que termine
+    return await this.processSingleDance('gift', data);
   }
 
   async handleTikTokFollow(data) {
@@ -553,8 +553,8 @@ class GModService {
       });
     }
 
-    // Agregar baile a la cola por evento de seguimiento
-    this.addDanceToQueue('follow', data);
+    // Procesar un baile inmediatamente y esperar a que termine
+    return await this.processSingleDance('follow', data);
   }
 
   async handleTikTokLike(data) {
@@ -570,8 +570,8 @@ class GModService {
       });
     }
 
-    // Agregar baile a la cola por evento de like
-    this.addDanceToQueue('like', data);
+    // Procesar un baile inmediatamente y esperar a que termine
+    return await this.processSingleDance('like', data);
   }
 
   async handleTikTokShare(data) {
@@ -585,8 +585,8 @@ class GModService {
       });
     }
 
-    // Agregar baile a la cola por evento de compartir
-    this.addDanceToQueue('share', data);
+    // Procesar un baile inmediatamente y esperar a que termine
+    return await this.processSingleDance('share', data);
   }
 
   async handleViewerCount(data) {
@@ -677,6 +677,67 @@ class GModService {
       return null;
     }
     return dances[Math.floor(Math.random() * dances.length)];
+  }
+
+  // Procesar un solo baile inmediatamente y esperar a que termine
+  async processSingleDance(eventType, data) {
+    // Verificar si ya estamos bailando
+    if (this.isDancing) {
+      logger.info(`⏸️ Skipping ${eventType} event - already dancing`);
+      // Crear una excepción especial para eventos omitidos
+      const skipError = new Error('Event skipped - already dancing');
+      skipError.isSkipped = true;
+      throw skipError;
+    }
+
+    const category = this.eventDanceMapping[eventType];
+    if (!category) {
+      logger.warn(`No dance category mapped for event type: ${eventType}`);
+      return false;
+    }
+
+    const dance = this.getRandomDance(category);
+    if (!dance) {
+      logger.warn(`No dances available for category: ${category}`);
+      return false;
+    }
+
+    const danceItem = {
+      dance,
+      eventType,
+      data,
+      timestamp: Date.now()
+    };
+
+    logger.info(`Starting dance: ${dance} for event: ${eventType}`);
+    
+    // Marcar como bailando
+    this.isDancing = true;
+    
+    try {
+      // Ejecutar el baile
+      const success = await this.executeDance(danceItem);
+      
+      if (success) {
+        // Esperar la duración del baile
+        await new Promise(resolve => {
+          this.currentDanceTimer = setTimeout(() => {
+            this.isDancing = false;
+            this.currentDanceTimer = null;
+            logger.info(`Dance completed: ${dance}`);
+            resolve();
+          }, this.danceTimeout);
+        });
+        return true;
+      } else {
+        this.isDancing = false;
+        return false;
+      }
+    } catch (error) {
+      logger.error(`Error executing dance ${dance}:`, error);
+      this.isDancing = false;
+      return false;
+    }
   }
 
   addDanceToQueue(eventType, data) {
