@@ -40,6 +40,7 @@ class TTSService {
     const model = options.model || config.tts.elevenlabs.model || 'eleven_multilingual_v2';
     const stability = options.stability || config.tts.elevenlabs.stability || 0.5;
     const similarityBoost = options.similarityBoost || config.tts.elevenlabs.similarityBoost || 0.5;
+    const speed = options.speed || config.tts.elevenlabs.speed || 1.0;
     const outputFormat = options.outputFormat || config.tts.elevenlabs.outputFormat || 'mp3_44100_128';
 
     const requestBody = {
@@ -48,7 +49,8 @@ class TTSService {
       voice_settings: {
         stability: stability,
         similarity_boost: similarityBoost
-      }
+      },
+      speed
     };
 
     // Add output_format to request body if specified
@@ -56,6 +58,7 @@ class TTSService {
       requestBody.output_format = outputFormat;
     }
 
+    console.log(requestBody);
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       requestBody,

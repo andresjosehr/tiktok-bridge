@@ -220,8 +220,8 @@ class MessageComposer {
    */
   composeMessage(eventType, variables = {}) {
     try {
+      
       if (!this.config || !this.config[eventType]) {
-        logger.warn(`No configuration found for event type: ${eventType}`);
         return {
           parts: [],
           fullText: '',
@@ -236,6 +236,7 @@ class MessageComposer {
       const textParts = [];
 
       for (const partType of structure) {
+ 
         let partText = '';
         
         if (partType === 'username') {
@@ -247,6 +248,7 @@ class MessageComposer {
           
           // Replace any placeholders in the part
           partText = this.replacePlaceholders(partText, variables);
+          
         }
 
         if (partText) {
@@ -256,11 +258,12 @@ class MessageComposer {
             isDynamic: partType === 'username'
           });
           textParts.push(partText);
+        } else {
         }
       }
 
       const fullText = textParts.join(' ');
-
+      
       return {
         parts,
         fullText,
@@ -270,7 +273,6 @@ class MessageComposer {
         timestamp: new Date().toISOString()
       };
     } catch (error) {
-      logger.error(`Failed to compose message for ${eventType}:`, error);
       return {
         parts: [],
         fullText: '',

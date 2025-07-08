@@ -27,12 +27,11 @@
         "¡Tremendo!"
       ],
       "connectors": [
-        "",
-        "prepárate,",
-        "atento,",
-        "escucha,",
-        "mira,",
-        "ahora,"
+        "prepárate",
+        "atento",
+        "escucha",
+        "mira",
+        "ahora"
       ],
       "actions": [
         "gracias por sumarte al caos",
@@ -103,10 +102,9 @@
             "¡Qué detalle tan lindo!"
           ],
           "connectors": [
-            "",
-            "mira,",
-            "fíjate,",
-            "qué hermoso,"
+            "mira",
+            "fíjate",
+            "qué hermoso"
           ],
           "actions": [
             "me ha enviado una rosa preciosa",
@@ -151,10 +149,9 @@
             "¡Oppa!"
           ],
           "connectors": [
-            "",
-            "mira,",
-            "qué lindo,",
-            "saranghae,"
+            "mira",
+            "qué lindo",
+            "saranghae"
           ],
           "actions": [
             "me ha enviado un corazón coreano! ¡Kyaa!",
@@ -199,10 +196,9 @@
             "¡Perfecto!"
           ],
           "connectors": [
-            "",
-            "mira,",
-            "escucha,",
-            "atento,"
+            "mira",
+            "escucha",
+            "atento"
           ],
           "actions": [
             "gracias por el regalo",
@@ -247,10 +243,9 @@
         "¡Hola ahí!"
       ],
       "connectors": [
-        "",
-        "escucha,",
-        "mira,",
-        "oye,"
+        "escucha",
+        "mira",
+        "oye"
       ],
       "actions": [
         "gracias por el mensaje",
@@ -290,9 +285,8 @@
         "¡Excelente!"
       ],
       "connectors": [
-        "",
-        "mira,",
-        "fíjate,"
+        "mira",
+        "fíjate"
       ],
       "actions": [
         "acaba de dar un like",
@@ -329,9 +323,8 @@
         "¡Excelente!"
       ],
       "connectors": [
-        "",
-        "mira,",
-        "fíjate,"
+        "mira",
+        "fíjate"
       ],
       "actions": [
         "acaba de compartir algo",
@@ -369,10 +362,9 @@
         "¡Perfecto!"
       ],
       "connectors": [
-        "",
-        "atento,",
-        "mira,",
-        "fíjate,"
+        "atento",
+        "mira",
+        "fíjate"
       ],
       "actions": [
         "acaba de interactuar",
@@ -411,10 +403,9 @@
         "¡Brutal!"
       ],
       "connectors": [
-        "",
-        "miren,",
-        "atención,",
-        "fíjense,"
+        "miren",
+        "atención",
+        "fíjense"
       ],
       "actions": [
         "hemos alcanzado {{count}} likes",
@@ -455,10 +446,9 @@
         "¡No puedo creerlo!"
       ],
       "connectors": [
-        "",
-        "miren,",
-        "atención,",
-        "fíjense,"
+        "miren",
+        "atención",
+        "fíjense"
       ],
       "actions": [
         "ya somos {{count}} seguidores",

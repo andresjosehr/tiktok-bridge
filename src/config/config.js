@@ -96,6 +96,7 @@ module.exports = {
       model: process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2',
       stability: parseFloat(process.env.ELEVENLABS_STABILITY) || 0.5,
       similarityBoost: parseFloat(process.env.ELEVENLABS_SIMILARITY_BOOST) || 0.5,
+      speed: parseFloat(process.env.ELEVENLABS_SPEED) || 1.0,
       outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_44100_128'
     },
 

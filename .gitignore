@@ -97,3 +97,8 @@ typings/
 # OS
 .DS_Store
 Thumbs.db
+
+audio_cache/parts/*
+audio_cache/usernames/*
+temp_audio_gmod/*
+temp_audio_gmod/*

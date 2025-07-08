@@ -62,14 +62,14 @@ class ModularTTSService {
 
       // Generate new audio
       logger.debug(`Generating TTS for: ${text}`);
-      const audioBuffer = await this.ttsService.generateSpeech(text);
+      const audioResult = await this.ttsService.generateSpeech(text);
       
       // Cache the audio
       if (this.options.enableCache) {
-        await this.audioCache.saveAudio(text, audioBuffer, type);
+        await this.audioCache.saveAudio(text, audioResult.audioBuffer, type);
       }
       
-      return audioBuffer;
+      return audioResult.audioBuffer;
     } catch (error) {
       logger.error(`Failed to generate TTS for "${text}":`, error);
       throw error;
@@ -128,21 +128,48 @@ class ModularTTSService {
    */
   async generateMessageAudio(eventType, variables = {}) {
     try {
+      logger.debug(`Generating audio for event: ${eventType}`);
+      logger.debug(`Variables:`, variables);
+      
       const message = await this.composeMessage(eventType, variables);
       
+      logger.debug(`Composed message:`, {
+        fullText: message.fullText,
+        structure: message.structure,
+        partsCount: message.parts.length,
+        onlyUsernamesInTTS: this.options.onlyUsernamesInTTS
+      });
+      
+      // Log each part details
+      message.parts.forEach((part, index) => {
+        logger.debug(`Part ${index + 1}:`, {
+          type: part.type,
+          text: part.text,
+          isDynamic: part.isDynamic,
+          length: part.text.length
+        });
+      });
+      
       if (this.options.onlyUsernamesInTTS) {
+        logger.debug(`Using modular mode (only usernames in TTS)`);
+        
         // Only generate TTS for usernames, return audio paths for parts
         const audioInfo = {
           message,
           audioFiles: [],
           dynamicAudio: null,
           staticAudioPaths: [],
-          fullAudioPath: null
+          fullAudioPath: null,
+          combinedAudioPath: null
         };
 
         // Process each part
         for (const part of message.parts) {
+          logger.debug(`Processing part: ${part.type} - "${part.text}"`);
+          
           if (part.isDynamic) {
+            logger.debug(`Generating TTS for dynamic part (username): "${part.text}"`);
+            
             // Generate TTS for username
             const audioBuffer = await this.generatePartAudio(part);
             const tempPath = path.join(
@@ -152,24 +179,63 @@ class ModularTTSService {
             await fs.writeFile(tempPath, audioBuffer);
             audioInfo.dynamicAudio = tempPath;
             audioInfo.audioFiles.push({ part, audioPath: tempPath, isDynamic: true });
+            
+            logger.debug(`Generated dynamic audio: ${tempPath}`);
           } else {
+            logger.debug(`Processing static part: "${part.text}"`);
+            
             // Get cached path for static part
             const cachedPath = await this.audioCache.getCachedAudio(part.text, 'part');
             if (cachedPath) {
+              logger.debug(`Using cached audio for: "${part.text}" -> ${cachedPath}`);
               audioInfo.staticAudioPaths.push(cachedPath);
               audioInfo.audioFiles.push({ part, audioPath: cachedPath, isDynamic: false });
             } else {
+              logger.debug(`Generating new audio for: "${part.text}"`);
+              
               // Generate and cache static part
               const audioBuffer = await this.generatePartAudio(part);
               const cachedPath = await this.audioCache.saveAudio(part.text, audioBuffer, 'part');
               audioInfo.staticAudioPaths.push(cachedPath);
               audioInfo.audioFiles.push({ part, audioPath: cachedPath, isDynamic: false });
+              
+              logger.debug(`Generated and cached: ${cachedPath}`);
             }
           }
         }
 
+        // Combine all audio files into one
+        if (audioInfo.audioFiles.length > 1) {
+          logger.debug(`Combining ${audioInfo.audioFiles.length} audio files`);
+          
+          try {
+            const combinedPath = await this.combineAudioFiles(audioInfo.audioFiles);
+            audioInfo.combinedAudioPath = combinedPath;
+            audioInfo.fullAudioPath = combinedPath;
+            
+            logger.debug(`Successfully combined audio: ${combinedPath}`);
+          } catch (error) {
+            logger.error(`Failed to combine audio files:`, error);
+            // Fallback to dynamic audio only
+            audioInfo.fullAudioPath = audioInfo.dynamicAudio;
+          }
+        } else if (audioInfo.audioFiles.length === 1) {
+          logger.debug(`Only one audio file, using it directly`);
+          audioInfo.fullAudioPath = audioInfo.audioFiles[0].audioPath;
+        }
+
+        logger.debug(`Final audio info:`, {
+          totalFiles: audioInfo.audioFiles.length,
+          dynamicAudio: audioInfo.dynamicAudio,
+          staticAudioPaths: audioInfo.staticAudioPaths.length,
+          combinedAudioPath: audioInfo.combinedAudioPath,
+          fullAudioPath: audioInfo.fullAudioPath
+        });
+
         return audioInfo;
       } else {
+        logger.debug(`Using complete message mode`);
+        
         // Generate TTS for complete message
         const audioBuffer = await this.generateTTSAudio(message.fullText, 'complete');
         const tempPath = path.join(
@@ -177,6 +243,8 @@ class ModularTTSService {
           `message_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${this.options.audioFormat}`
         );
         await fs.writeFile(tempPath, audioBuffer);
+        
+        logger.debug(`Generated complete message audio: ${tempPath}`);
         
         return {
           message,
@@ -186,6 +254,59 @@ class ModularTTSService {
       }
     } catch (error) {
       logger.error(`Failed to generate message audio for ${eventType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Combine multiple audio files into one
+   * @param {Array} audioFiles - Array of audio file objects with audioPath
+   * @returns {string} - Path to combined audio file
+   */
+  async combineAudioFiles(audioFiles) {
+    const { exec } = require('child_process');
+    const util = require('util');
+    const execAsync = util.promisify(exec);
+    
+    try {
+      logger.debug(`Starting audio combination for ${audioFiles.length} files`);
+      
+      // Create a file list for ffmpeg with absolute paths
+      const fileListPath = path.join(this.options.tempDirectory, `filelist_${Date.now()}.txt`);
+      const fileListContent = audioFiles.map(file => {
+        const absolutePath = path.isAbsolute(file.audioPath) ? file.audioPath : path.resolve(file.audioPath);
+        return `file '${absolutePath}'`;
+      }).join('\n');
+      await fs.writeFile(fileListPath, fileListContent);
+      
+      logger.debug(`Created file list: ${fileListPath}`);
+      logger.debug(`File list content:`, fileListContent);
+      
+      // Generate output path
+      const outputPath = path.join(
+        this.options.tempDirectory, 
+        `combined_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${this.options.audioFormat}`
+      );
+      
+      // Use ffmpeg to concatenate audio files
+      const ffmpegCommand = `ffmpeg -f concat -safe 0 -i "${fileListPath}" -c copy "${outputPath}"`;
+      
+      logger.debug(`Executing ffmpeg command: ${ffmpegCommand}`);
+      
+      const { stdout, stderr } = await execAsync(ffmpegCommand);
+      
+      if (stderr) {
+        logger.debug(`FFmpeg stderr:`, stderr);
+      }
+      
+      // Clean up file list
+      await fs.unlink(fileListPath);
+      
+      logger.debug(`Successfully combined audio: ${outputPath}`);
+      
+      return outputPath;
+    } catch (error) {
+      logger.error(`Failed to combine audio files:`, error);
       throw error;
     }
   }

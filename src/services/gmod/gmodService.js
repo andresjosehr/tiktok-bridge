@@ -257,39 +257,34 @@ class GModService extends ServiceBase {
   async generateModularTTS(messageType, data = {}) {
     try {
       const audioInfo = await this.modularTTS.generateMessageAudio(messageType, data);
-      
       if (!audioInfo || !audioInfo.audioFiles || audioInfo.audioFiles.length === 0) {
-        logger.warn(`No modular TTS audio generated for type: ${messageType}`);
         return null;
       }
 
-      // For now, we'll combine all audio files or use the main one
+      // Determine which audio file to play
       let mainAudioPath = null;
       let totalDuration = 0;
 
       if (audioInfo.fullAudioPath) {
-        // Single combined audio file
         mainAudioPath = audioInfo.fullAudioPath;
         totalDuration = await this.getAudioDuration(mainAudioPath);
+      } else if (audioInfo.combinedAudioPath) {
+        mainAudioPath = audioInfo.combinedAudioPath;
+        totalDuration = await this.getAudioDuration(mainAudioPath);
       } else if (audioInfo.dynamicAudio) {
-        // Use the dynamic username audio for now (could be enhanced to combine all parts)
         mainAudioPath = audioInfo.dynamicAudio;
         totalDuration = await this.getAudioDuration(mainAudioPath);
       } else if (audioInfo.audioFiles.length > 0) {
-        // Use the first available audio file
         mainAudioPath = audioInfo.audioFiles[0].audioPath;
         totalDuration = await this.getAudioDuration(mainAudioPath);
       }
 
       if (!mainAudioPath) {
-        logger.warn('No valid audio path found in modular TTS result');
         return null;
       }
 
       // Play the audio
       this.playAudio(mainAudioPath);
-
-      logger.info(`Modular TTS generated successfully: ${audioInfo.message.fullText.substring(0, 50)}...`);
 
       return {
         audioBuffer: null, // Not needed since we have file path

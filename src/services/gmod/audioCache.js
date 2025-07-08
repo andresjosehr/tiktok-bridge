@@ -72,7 +72,7 @@ class AudioCache {
    */
   async getCachedAudio(text, type = 'part') {
     const audioPath = this.getAudioPath(text, type);
-    const exists = await this.exists(text, type);
+    const exists = await this.exists(text, type);    
     return exists ? audioPath : null;
   }
 
@@ -88,10 +88,8 @@ class AudioCache {
     
     try {
       await fs.writeFile(audioPath, audioBuffer);
-      logger.info(`Audio cached: ${text} -> ${audioPath}`);
       return audioPath;
     } catch (error) {
-      logger.error(`Failed to cache audio for "${text}":`, error);
       throw error;
     }
   }
