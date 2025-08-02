@@ -4,8 +4,9 @@ const Rcon = require('rcon');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
 const ServiceBase = require('../ServiceBase');
-const ModularTTSService = require('./modularTTSService');
+const ttsService = require('../external/ttsService');
 const { exec } = require('child_process');
+const path = require('path');
 
 class GModService extends ServiceBase {
   constructor() {
@@ -225,10 +226,11 @@ class GModService extends ServiceBase {
     };
 
     // Inicializar servicio TTS modular
-    this.modularTTS = new ModularTTSService({
+    this.modularTTS = ttsService.createModularService({
       enableCache: true,
       onlyUsernamesInTTS: true,
-      tempDirectory: './temp_audio_gmod'
+      tempDirectory: './temp_audio_gmod',
+      configPath: path.join(__dirname, 'gmod-tts-modular.json')
     });
     
     // Sistema de tracking de milestones

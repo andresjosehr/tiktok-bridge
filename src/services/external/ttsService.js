@@ -1,6 +1,7 @@
 const axios = require('axios');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
+const ModularTTSService = require('./tts/modularTTSService');
 
 class TTSService {
   constructor() {
@@ -279,6 +280,82 @@ class TTSService {
 
   getSupportedProviders() {
     return Object.keys(this.providers);
+  }
+
+  /**
+   * Create a new modular TTS service instance
+   * @param {Object} options - Configuration options for the modular TTS service
+   * @returns {ModularTTSService} - New modular TTS service instance
+   */
+  createModularService(options = {}) {
+    // Inject this instance to avoid circular dependency
+    options.ttsService = this;
+    return new ModularTTSService(options);
+  }
+
+  /**
+   * Validate TTS service configuration
+   * @returns {Object} - Validation results
+   */
+  async validateConfiguration() {
+    const issues = [];
+    const warnings = [];
+
+    try {
+      // Check if TTS is enabled
+      if (!this.isEnabled()) {
+        warnings.push('TTS service is disabled');
+      }
+
+      // Check if at least one provider is configured
+      const availableProviders = [];
+      
+      if (config.tts?.elevenlabs?.apiKey) {
+        availableProviders.push('elevenlabs');
+      }
+      if (config.tts?.openai?.apiKey) {
+        availableProviders.push('openai');
+      }
+      if (config.tts?.azure?.apiKey && config.tts?.azure?.region) {
+        availableProviders.push('azure');
+      }
+      if (config.tts?.google?.apiKey) {
+        availableProviders.push('google');
+      }
+
+      if (availableProviders.length === 0) {
+        issues.push('No TTS providers are configured with valid API keys');
+      } else {
+        logger.debug(`Available TTS providers: ${availableProviders.join(', ')}`);
+      }
+
+      // Check if default provider is available
+      const defaultProvider = config.tts?.defaultProvider || 'elevenlabs';
+      if (!availableProviders.includes(defaultProvider)) {
+        if (availableProviders.length > 0) {
+          warnings.push(`Default provider '${defaultProvider}' is not configured, will use '${availableProviders[0]}'`);
+        } else {
+          issues.push(`Default provider '${defaultProvider}' is not configured and no alternatives available`);
+        }
+      }
+
+      return {
+        valid: issues.length === 0,
+        issues,
+        warnings,
+        availableProviders,
+        defaultProvider
+      };
+    } catch (error) {
+      logger.error('Failed to validate TTS configuration:', error);
+      return {
+        valid: false,
+        issues: ['Failed to validate TTS configuration'],
+        warnings: [],
+        availableProviders: [],
+        defaultProvider: null
+      };
+    }
   }
 }
 

@@ -1,14 +1,18 @@
 const path = require('path');
 const fs = require('fs').promises;
-const logger = require('../../utils/logger');
-const ttsService = require('../external/ttsService');
-const AudioCache = require('./audioCache');
+const logger = require('../../../utils/logger');
+// ttsService will be injected via constructor to avoid circular dependency
+const TTSCache = require('./ttsCache');
 const MessageComposer = require('./messageComposer');
 
 class ModularTTSService {
   constructor(options = {}) {
-    this.ttsService = ttsService;
-    this.audioCache = new AudioCache(options.cacheDirectory || './audio_cache');
+    // Inject ttsService to avoid circular dependency
+    this.ttsService = options.ttsService;
+    if (!this.ttsService) {
+      throw new Error('ttsService must be provided via options.ttsService');
+    }
+    this.ttsCache = new TTSCache(options.cacheDirectory || './audio_cache');
     this.messageComposer = new MessageComposer(
       options.configPath || path.join(__dirname, 'gmod-tts-modular.json')
     );
@@ -34,7 +38,7 @@ class ModularTTSService {
       await fs.mkdir(this.options.tempDirectory, { recursive: true });
       
       // Initialize components
-      await this.audioCache.init();
+      await this.ttsCache.init();
       await this.messageComposer.init();
       
       logger.info('Modular TTS Service initialized');
@@ -53,7 +57,7 @@ class ModularTTSService {
     try {
       // Check cache first
       if (this.options.enableCache) {
-        const cachedPath = await this.audioCache.getCachedAudio(text, type);
+        const cachedPath = await this.ttsCache.getCachedAudio(text, type);
         if (cachedPath) {
           logger.debug(`Using cached audio for: ${text}`);
           return await fs.readFile(cachedPath);
@@ -66,7 +70,7 @@ class ModularTTSService {
       
       // Cache the audio
       if (this.options.enableCache) {
-        await this.audioCache.saveAudio(text, audioResult.audioBuffer, type);
+        await this.ttsCache.saveAudio(text, audioResult.audioBuffer, type);
       }
       
       return audioResult.audioBuffer;
@@ -88,7 +92,7 @@ class ModularTTSService {
     } else {
       // Check if static part is cached
       if (this.options.enableCache) {
-        const cachedPath = await this.audioCache.getCachedAudio(part.text, 'part');
+        const cachedPath = await this.ttsCache.getCachedAudio(part.text, 'part');
         if (cachedPath) {
           return await fs.readFile(cachedPath);
         }
@@ -185,7 +189,7 @@ class ModularTTSService {
             logger.debug(`Processing static part: "${part.text}"`);
             
             // Get cached path for static part
-            const cachedPath = await this.audioCache.getCachedAudio(part.text, 'part');
+            const cachedPath = await this.ttsCache.getCachedAudio(part.text, 'part');
             if (cachedPath) {
               logger.debug(`Using cached audio for: "${part.text}" -> ${cachedPath}`);
               audioInfo.staticAudioPaths.push(cachedPath);
@@ -195,7 +199,7 @@ class ModularTTSService {
               
               // Generate and cache static part
               const audioBuffer = await this.generatePartAudio(part);
-              const cachedPath = await this.audioCache.saveAudio(part.text, audioBuffer, 'part');
+              const cachedPath = await this.ttsCache.saveAudio(part.text, audioBuffer, 'part');
               audioInfo.staticAudioPaths.push(cachedPath);
               audioInfo.audioFiles.push({ part, audioPath: cachedPath, isDynamic: false });
               
@@ -340,7 +344,7 @@ class ModularTTSService {
         for (const [partType, parts] of Object.entries(eventConfig.parts)) {
           for (const partText of parts) {
             try {
-              const exists = await this.audioCache.exists(partText, 'part');
+              const exists = await this.ttsCache.exists(partText, 'part');
               if (!exists) {
                 await this.generateTTSAudio(partText, 'part');
                 stats.generated++;
@@ -400,7 +404,7 @@ class ModularTTSService {
   async getStats() {
     try {
       const [cacheStats, configStats] = await Promise.all([
-        this.audioCache.getStats(),
+        this.ttsCache.getStats(),
         Promise.resolve(this.messageComposer.getConfigStats())
       ]);
 

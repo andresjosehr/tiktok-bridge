@@ -1,9 +1,9 @@
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
-const logger = require('../../utils/logger');
+const logger = require('../../../utils/logger');
 
-class AudioCache {
+class TTSCache {
   constructor(cacheDirectory = './audio_cache') {
     this.cacheDirectory = cacheDirectory;
     this.init();
@@ -17,7 +17,7 @@ class AudioCache {
       await fs.mkdir(path.join(this.cacheDirectory, 'parts'), { recursive: true });
       await fs.mkdir(path.join(this.cacheDirectory, 'usernames'), { recursive: true });
       
-      logger.info(`Audio cache initialized at: ${this.cacheDirectory}`);
+      logger.info(`TTS cache initialized at: ${this.cacheDirectory}`);
     } catch (error) {
       logger.error('Failed to initialize audio cache:', error);
     }
@@ -181,4 +181,4 @@ class AudioCache {
   }
 }
 
-module.exports = AudioCache;
+module.exports = TTSCache;
