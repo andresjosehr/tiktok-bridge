@@ -11,6 +11,9 @@ class DinoChrome extends ServiceBase {
     this.isGameRunning = false;
     this.jumpInterval = null;
     this.gameMonitorInterval = null;
+    this.lastJumpTime = 0;
+    this.consecutiveObstacles = 0;
+    this.currentSpeed = 6;
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }
 
@@ -75,8 +78,9 @@ class DinoChrome extends ServiceBase {
 
   async disconnect() {
     try {
-      // Detener intervalos
+      // Detener intervalos (tanto setInterval como setTimeout)
       if (this.jumpInterval) {
+        clearTimeout(this.jumpInterval);
         clearInterval(this.jumpInterval);
         this.jumpInterval = null;
       }
@@ -233,13 +237,16 @@ class DinoChrome extends ServiceBase {
     this.isGameRunning = true;
     logger.info(`${this.emoji} Starting auto-jumping system...`);
     
+    // Declarar scheduleDynamicJump en el scope de la clase para reutilización
+    let scheduleDynamicJump;
+    
     // Función para detectar obstáculos y saltar
     const autoJump = async () => {
       if (!this.page || !this.isGameRunning) return;
       
       try {
         // Evaluar en el contexto de la página para detectar obstáculos
-        const shouldJump = await this.page.evaluate(() => {
+        const jumpInfo = await this.page.evaluate(() => {
           // Acceder al objeto del juego del dinosaurio
           if (typeof Runner !== 'undefined' && Runner.instance_) {
             const game = Runner.instance_;
@@ -249,30 +256,316 @@ class DinoChrome extends ServiceBase {
               // Obtener la posición del dinosaurio
               const dinoX = game.tRex.xPos;
               const dinoY = game.tRex.yPos;
+              const dinoJumping = game.tRex.jumping;
+              const dinoSpeedY = game.tRex.speedY || 0; // Velocidad vertical
+              const speed = game.currentSpeed || 6;
+              
+              // CONSTANTES FÍSICAS DEL JUEGO (valores reales del Chrome Dino)
+              const JUMP_VELOCITY = -10; // Velocidad inicial del salto (negativa = hacia arriba)
+              const GRAVITY = 0.6; // Gravedad del juego
+              const JUMP_DURATION_FRAMES = Math.abs(2 * JUMP_VELOCITY / GRAVITY); // ~33 frames
+              const JUMP_DURATION_MS = JUMP_DURATION_FRAMES * 16.67; // ~550ms a 60fps
+              
+              // Calcular distancia que viaja el dino durante un salto completo
+              const HORIZONTAL_DISTANCE_PER_JUMP = (speed * JUMP_DURATION_MS) / 16.67;
+              
+              // Calcular punto de aterrizaje proyectado
+              const landingX = dinoX + HORIZONTAL_DISTANCE_PER_JUMP;
               
               // Verificar obstáculos cercanos
               const obstacles = game.horizon.obstacles;
               
+              // Distancia de detección más agresiva para obstáculos consecutivos
+              const reactionTime = 120; // 120ms tiempo de reacción
+              const speedFactor = Math.min(speed * 10, 100); // Factor de velocidad limitado
+              const detectionDistance = 80 + speedFactor; // Base 80px + factor de velocidad
+              
+              // Distancia extendida para detectar secuencias problemáticas temprano
+              const sequenceDetectionDistance = detectionDistance + 120;
+              
+              // Detectar obstáculos para análisis completo
+              let obstaclesInRange = [];
+              
               for (let i = 0; i < obstacles.length; i++) {
                 const obstacle = obstacles[i];
                 const obstacleX = obstacle.xPos;
+                const obstacleY = obstacle.yPos;
                 const obstacleWidth = obstacle.width || 20;
+                const obstacleHeight = obstacle.height || 20;
+                const obstacleType = obstacle.typeConfig?.type || 'CACTUS';
                 
-                // Si hay un obstáculo cerca (distancia de detección)
-                const detectionDistance = 100;
-                if (obstacleX - dinoX < detectionDistance && obstacleX - dinoX > 0) {
-                  return true; // Saltar
+                // ANÁLISIS DETALLADO DE TIPOS Y TAMAÑOS DE OBSTÁCULOS
+                let obstacleCategory = 'unknown';
+                let safetyMargin = 25; // Margen base de seguridad
+                
+                if (obstacleType === 'PTERODACTYL') {
+                  obstacleCategory = 'pterodactyl';
+                  safetyMargin = 15; // Menos margen para pájaros
+                } else {
+                  // Categorizar cactus por ancho
+                  if (obstacleWidth <= 20) {
+                    obstacleCategory = 'small_cactus'; // Cactus simple
+                    safetyMargin = 20;
+                  } else if (obstacleWidth <= 35) {
+                    obstacleCategory = 'medium_cactus'; // Cactus doble
+                    safetyMargin = 30;
+                  } else if (obstacleWidth <= 50) {
+                    obstacleCategory = 'large_cactus'; // Cactus triple
+                    safetyMargin = 40;
+                  } else {
+                    obstacleCategory = 'extra_large_cactus'; // Cactus muy grande
+                    safetyMargin = 50;
+                  }
+                }
+                
+                const distance = obstacleX - dinoX;
+                const obstacleEndX = obstacleX + obstacleWidth;
+                const safeLandingPoint = obstacleEndX + safetyMargin;
+                
+                // Solo considerar obstáculos relevantes (usar distancia extendida para secuencias)
+                if (distance > -20 && distance < sequenceDetectionDistance) {
+                  const isPtero = obstacleType === 'PTERODACTYL' || obstacle.gap > 0;
+                  const isHighBird = isPtero && obstacleY < 75;
+                  const isLowBird = isPtero && obstacleY >= 75;
+                  
+                  // Verificar si el punto de aterrizaje colisionaría con este obstáculo
+                  const wouldLandOnObstacle = landingX >= obstacleX && landingX <= obstacleEndX;
+                  
+                  obstaclesInRange.push({
+                    distance,
+                    x: obstacleX,
+                    endX: obstacleEndX,
+                    y: obstacleY,
+                    width: obstacleWidth,
+                    height: obstacleHeight,
+                    type: isHighBird ? 'high_bird' : (isLowBird ? 'low_bird' : 'cactus'),
+                    category: obstacleCategory,
+                    safetyMargin: safetyMargin,
+                    safeLandingPoint: safeLandingPoint,
+                    needsJump: !isHighBird,
+                    wouldLandOnObstacle: wouldLandOnObstacle && !isHighBird
+                  });
+                }
+              }
+              
+              // Ordenar por distancia
+              obstaclesInRange.sort((a, b) => a.distance - b.distance);
+              
+              // ANÁLISIS CRÍTICO: Verificar obstáculos en zona de aterrizaje Y próximos
+              const obstaclesInLandingZone = obstaclesInRange.filter(obs => 
+                obs.wouldLandOnObstacle && obs.needsJump
+              );
+              
+              // ANÁLISIS ADICIONAL: Detectar secuencias problemáticas
+              const proximityThreshold = 80; // Distancia mínima entre obstáculos para ser "seguidos"
+              let obstacleSequences = [];
+              
+              for (let i = 0; i < obstaclesInRange.length - 1; i++) {
+                const current = obstaclesInRange[i];
+                const next = obstaclesInRange[i + 1];
+                
+                if (current.needsJump && next.needsJump) {
+                  const gap = next.x - current.endX;
+                  if (gap < proximityThreshold) {
+                    obstacleSequences.push({
+                      start: current,
+                      end: next,
+                      gap: gap,
+                      totalWidth: next.endX - current.x,
+                      isProblematic: gap < 50 // Gaps menores a 50px son problemáticos
+                    });
+                  }
+                }
+              }
+              
+              // LÓGICA MEJORADA PARA OBSTÁCULOS CONSECUTIVOS
+              if (obstaclesInRange.length > 0) {
+                const firstObstacle = obstaclesInRange[0];
+                
+                // LÓGICA ESPECIAL: Si ya está saltando pero viene otro obstáculo muy cerca
+                if (dinoJumping && firstObstacle.distance < 60 && firstObstacle.needsJump) {
+                  // Calcular si puede hacer un segundo salto (salto doble)
+                  const isDescending = dinoSpeedY > 0; // Velocidad positiva = cayendo
+                  const canDoubleJump = !isDescending && dinoSpeedY < -2; // Solo si aún está subiendo
+                  
+                  if (canDoubleJump) {
+                    return {
+                      shouldJump: true,
+                      type: 'double_jump',
+                      distance: firstObstacle.distance,
+                      speed: speed,
+                      isHighSpeed: speed > 10,
+                      consecutiveObstacles: 1,
+                      inAir: true,
+                      shortJump: true
+                    };
+                  }
+                }
+                
+                // Verificar obstáculos inmediatos (solo si no está saltando)
+                if (firstObstacle.distance < detectionDistance && firstObstacle.needsJump) {
+                  
+                  // CASO CRÍTICO: Detectar secuencias problemáticas primero
+                  const problematicSequence = obstacleSequences.find(seq => seq.isProblematic && seq.start.distance < detectionDistance);
+                  
+                  // NUEVA ESTRATEGIA: En lugar de saltos extendidos, usar saltos rápidos y precisos
+                  if (obstaclesInLandingZone.length > 0 || problematicSequence) {
+                    
+                    // Para obstáculos consecutivos, usar salto CORTO y preciso para pasar solo el primer obstáculo
+                    if (!dinoJumping) {
+                      // USAR PUNTO DE ATERRIZAJE SEGURO CALCULADO basado en ancho real del obstáculo
+                      const safeLandingX = firstObstacle.safeLandingPoint;
+                      const shortJumpDistance = safeLandingX - dinoX;
+                      
+                      // Calcular ratio de salto basado en distancia real necesaria
+                      const shortJumpRatio = shortJumpDistance / HORIZONTAL_DISTANCE_PER_JUMP;
+                      
+                      // Ajustar duración basada en el tipo de obstáculo
+                      let durationMultiplier = 1.0;
+                      if (firstObstacle.category === 'large_cactus' || firstObstacle.category === 'extra_large_cactus') {
+                        durationMultiplier = 1.2; // 20% más duración para cactus grandes
+                      } else if (firstObstacle.category === 'medium_cactus') {
+                        durationMultiplier = 1.1; // 10% más duración para cactus medianos
+                      }
+                      
+                      return {
+                        shouldJump: true,
+                        type: 'width_aware_jump',
+                        distance: firstObstacle.distance,
+                        speed: speed,
+                        isHighSpeed: speed > 10,
+                        consecutiveObstacles: obstaclesInLandingZone.length + (problematicSequence ? 1 : 0),
+                        shortJump: true,
+                        jumpRatio: Math.min(shortJumpRatio, 1.3), // Permitir hasta 30% más de salto normal
+                        targetClearanceX: safeLandingX,
+                        obstacleWidth: firstObstacle.width,
+                        obstacleCategory: firstObstacle.category,
+                        durationMultiplier: durationMultiplier,
+                        isSequenceStart: true
+                      };
+                    }
+                  }
+                  // CASO NORMAL: No hay obstáculos en zona de aterrizaje
+                  else if (!dinoJumping) {
+                    // Contar obstáculos consecutivos próximos
+                    let consecutiveCount = 0;
+                    for (let i = 0; i < Math.min(4, obstaclesInRange.length); i++) {
+                      if (obstaclesInRange[i].needsJump && obstaclesInRange[i].distance < detectionDistance + 60) {
+                        consecutiveCount++;
+                      }
+                    }
+                    
+                    return {
+                      shouldJump: true,
+                      type: firstObstacle.type,
+                      distance: firstObstacle.distance,
+                      speed: speed,
+                      isHighSpeed: speed > 10,
+                      consecutiveObstacles: consecutiveCount,
+                      extendedJump: false,
+                      landingIssue: false,
+                      obstacleWidth: firstObstacle.width,
+                      obstacleCategory: firstObstacle.category,
+                      targetClearanceX: firstObstacle.safeLandingPoint
+                    };
+                  }
+                }
+                // Pájaros altos - agacharse
+                else if (firstObstacle.type === 'high_bird' && firstObstacle.distance < detectionDistance) {
+                  return { shouldJump: false, type: 'high_bird', distance: firstObstacle.distance, speed };
                 }
               }
             }
           }
-          return false;
+          return { shouldJump: false, type: 'none', distance: 0, speed: 6 };
         });
         
-        // Si se detectó un obstáculo, saltar
-        if (shouldJump) {
-          await this.page.keyboard.press('Space');
-          logger.debug(`${this.emoji} Obstacle detected - JUMPING!`);
+        // Si se detectó un obstáculo, ejecutar acción apropiada con salto dinámico
+        if (jumpInfo.shouldJump) {
+          const currentTime = Date.now();
+          const timeSinceLastJump = currentTime - this.lastJumpTime;
+          
+          // NUEVO: Manejar saltos dobles para obstáculos muy consecutivos
+          if (jumpInfo.type === 'double_jump' && jumpInfo.inAir) {
+            // SALTO DOBLE: Pulso rápido de espacio mientras está en el aire
+            await this.page.keyboard.press('Space');
+            logger.warn(`${this.emoji} DOUBLE JUMP while in air! Distance to next obstacle: ${jumpInfo.distance}`);
+          }
+          // NUEVO: Manejar saltos conscientes del ancho de obstáculos
+          else if ((jumpInfo.shortJump && jumpInfo.isSequenceStart) || jumpInfo.type === 'width_aware_jump') {
+            // SALTO AJUSTADO POR ANCHO: Duración calculada basada en el ancho real del obstáculo
+            const baseDuration = 100; // Duración mínima
+            const jumpRatio = jumpInfo.jumpRatio || 0.8;
+            const durationMultiplier = jumpInfo.durationMultiplier || 1.0;
+            
+            // Calcular duración final considerando ancho del obstáculo
+            const rawDuration = baseDuration + (jumpRatio * 60); // 100-160ms base
+            const finalDuration = Math.floor(rawDuration * durationMultiplier);
+            
+            await this.page.keyboard.down('Space');
+            await new Promise(resolve => setTimeout(resolve, finalDuration));
+            await this.page.keyboard.up('Space');
+            
+            const obstacleInfo = jumpInfo.obstacleCategory ? `${jumpInfo.obstacleCategory}(${jumpInfo.obstacleWidth}px)` : 'unknown';
+            logger.info(`${this.emoji} WIDTH-AWARE JUMP! Duration: ${finalDuration}ms (${durationMultiplier}x), Obstacle: ${obstacleInfo}, Target: ${jumpInfo.targetClearanceX}, Ratio: ${jumpRatio.toFixed(2)}`);
+          }
+          // Salto de alta velocidad y múltiples obstáculos
+          else if (jumpInfo.isHighSpeed && jumpInfo.consecutiveObstacles > 1) {
+            // Salto más potente para alta velocidad y obstáculos consecutivos
+            const powerDuration = 160 + Math.min(jumpInfo.speed * 4, 80); // Máximo 240ms
+            await this.page.keyboard.down('Space');
+            await new Promise(resolve => setTimeout(resolve, powerDuration));
+            await this.page.keyboard.up('Space');
+            logger.debug(`${this.emoji} HIGH-SPEED POWER JUMP! Speed: ${jumpInfo.speed}, Duration: ${powerDuration}ms, Consecutive: ${jumpInfo.consecutiveObstacles}`);
+          }
+          // Salto para múltiples obstáculos a velocidad media
+          else if (jumpInfo.consecutiveObstacles > 1 && jumpInfo.speed > 7) {
+            // Salto medio-potente para secuencias de obstáculos
+            const mediumDuration = 130 + (jumpInfo.speed * 3);
+            await this.page.keyboard.down('Space');
+            await new Promise(resolve => setTimeout(resolve, mediumDuration));
+            await this.page.keyboard.up('Space');
+            logger.debug(`${this.emoji} MEDIUM POWER JUMP! Speed: ${jumpInfo.speed}, Duration: ${mediumDuration}ms, Consecutive: ${jumpInfo.consecutiveObstacles}`);
+          }
+          // Salto rápido para obstáculos muy seguidos (menos de 600ms desde último salto)
+          else if (timeSinceLastJump < 600 && jumpInfo.consecutiveObstacles > 0) {
+            // Salto rápido optimizado
+            const quickDuration = 90 + (jumpInfo.speed * 2);
+            await this.page.keyboard.down('Space');
+            await new Promise(resolve => setTimeout(resolve, quickDuration));
+            await this.page.keyboard.up('Space');
+            logger.debug(`${this.emoji} QUICK CONSECUTIVE JUMP! Gap: ${timeSinceLastJump}ms, Duration: ${quickDuration}ms`);
+          }
+          // Salto estándar (ahora consciente del ancho)
+          else {
+            // Salto estándar con duración optimizada por velocidad Y ancho del obstáculo
+            let baseDuration = 110 + Math.min(jumpInfo.speed * 2, 40);
+            
+            // Ajustar duración basada en ancho del obstáculo
+            if (jumpInfo.obstacleCategory) {
+              if (jumpInfo.obstacleCategory === 'large_cactus' || jumpInfo.obstacleCategory === 'extra_large_cactus') {
+                baseDuration *= 1.15; // 15% más para cactus grandes
+              } else if (jumpInfo.obstacleCategory === 'medium_cactus') {
+                baseDuration *= 1.08; // 8% más para cactus medianos
+              }
+            }
+            
+            const standardDuration = Math.floor(baseDuration);
+            
+            await this.page.keyboard.down('Space');
+            await new Promise(resolve => setTimeout(resolve, standardDuration));
+            await this.page.keyboard.up('Space');
+            
+            const obstacleInfo = jumpInfo.obstacleCategory ? `${jumpInfo.obstacleCategory}(${jumpInfo.obstacleWidth}px)` : jumpInfo.type;
+            logger.debug(`${this.emoji} STANDARD WIDTH-AWARE JUMP - ${obstacleInfo} at distance ${jumpInfo.distance}, Duration: ${standardDuration}ms`);
+          }
+          
+          this.lastJumpTime = currentTime;
+          this.consecutiveObstacles = jumpInfo.consecutiveObstacles || 0;
+          
+        } else if (jumpInfo.type === 'high_bird') {
+          // Para pájaros altos, simplemente agacharse (no hacer nada, dejar que pase)
+          logger.debug(`${this.emoji} High bird detected - DUCKING (letting it pass)`);
         }
         
       } catch (error) {
@@ -280,8 +573,32 @@ class DinoChrome extends ServiceBase {
       }
     };
     
-    // Ejecutar la detección cada 50ms (muy responsivo)
-    this.jumpInterval = setInterval(autoJump, 50);
+    // Ejecutar la detección con intervalo más agresivo para obstáculos consecutivos
+    const getDynamicInterval = () => {
+      // Intervalo más frecuente para velocidades altas, pero nunca menos de 20ms
+      const baseInterval = 35;
+      const speedReduction = Math.floor((this.currentSpeed || 6) * 1.5);
+      return Math.max(20, baseInterval - speedReduction);
+    };
+    
+    // Función recursiva para mantener intervalo dinámico
+    scheduleDynamicJump = () => {
+      if (!this.isGameRunning) return;
+      
+      autoJump().then(() => {
+        if (this.isGameRunning) {
+          this.jumpInterval = setTimeout(scheduleDynamicJump, getDynamicInterval());
+        }
+      }).catch(error => {
+        logger.debug(`${this.emoji} Jump scheduling error: ${error.message}`);
+        if (this.isGameRunning) {
+          this.jumpInterval = setTimeout(scheduleDynamicJump, 40); // Fallback interval
+        }
+      });
+    };
+    
+    // Iniciar el ciclo dinámico
+    scheduleDynamicJump();
     
     // Monitor del estado del juego cada 2 segundos
     this.gameMonitorInterval = setInterval(async () => {
@@ -302,10 +619,15 @@ class DinoChrome extends ServiceBase {
         });
         
         if (gameStatus) {
+          // Actualizar velocidad actual para el intervalo dinámico
+          this.currentSpeed = gameStatus.speed || 6;
+          
           if (gameStatus.crashed && this.isGameRunning) {
             logger.info(`${this.emoji} Game Over! Score: ${gameStatus.score}. Restarting...`);
             // Reiniciar el juego presionando espacio
             await this.page.keyboard.press('Space');
+            // Reiniciar el sistema de saltos dinámicos
+            scheduleDynamicJump();
           } else if (gameStatus.playing) {
             logger.debug(`${this.emoji} Game running - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}`);
           }
@@ -315,6 +637,7 @@ class DinoChrome extends ServiceBase {
       }
     }, 2000);
   }
+
 
   // Método para mostrar información del servicio
   showServiceInfo() {
