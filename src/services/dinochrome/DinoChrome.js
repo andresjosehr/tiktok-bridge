@@ -1,6 +1,10 @@
 const ServiceBase = require('../ServiceBase');
 const logger = require('../../utils/logger');
 const puppeteer = require('puppeteer');
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
 class DinoChrome extends ServiceBase {
   constructor() {
@@ -14,6 +18,8 @@ class DinoChrome extends ServiceBase {
     this.lastJumpTime = 0;
     this.consecutiveObstacles = 0;
     this.currentSpeed = 6;
+    this.isPlayingAudio = false;
+    this.audioQueue = [];
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }
 
@@ -90,6 +96,10 @@ class DinoChrome extends ServiceBase {
         this.gameMonitorInterval = null;
       }
       
+      // Limpiar cola de audio y estado de reproducción
+      this.isPlayingAudio = false;
+      this.audioQueue = [];
+      
       // Cerrar browser
       if (this.browser) {
         await this.browser.close();
@@ -143,6 +153,38 @@ class DinoChrome extends ServiceBase {
     const randomCelebration = celebration[Math.floor(Math.random() * celebration.length)];
     console.log(`${randomCelebration} ¡GRACIAS POR EL REGALO! ${randomCelebration}`);
     console.log('🎁'.repeat(20) + '\n');
+    
+    // Detectar si el regalo es una rosa y reproducir audio aleatorio
+    if (data.giftName && data.giftName.toLowerCase().includes('rose')) {
+      console.log(`🌹 ¡ROSA DETECTADA! Reproduciendo audio especial... 🌹`);
+      
+      // Si ya hay un audio reproduciéndose, agregarlo a la cola
+      if (this.isPlayingAudio) {
+        const audioPath = this.getRandomRoseAudio();
+        if (audioPath) {
+          this.audioQueue.push({
+            path: audioPath,
+            giftData: data
+          });
+          logger.info(`${this.emoji} Rose audio queued: ${path.basename(audioPath)} (Queue size: ${this.audioQueue.length})`);
+        }
+      } else {
+        // Reproducir inmediatamente sin bloquear el procesamiento de eventos
+        const audioPath = this.getRandomRoseAudio();
+        if (audioPath) {
+          logger.info(`${this.emoji} Playing rose audio: ${path.basename(audioPath)}`);
+          // Ejecutar de forma asíncrona sin await para no bloquear
+          this.playAudio(audioPath).then(() => {
+            // Procesar la cola después de terminar
+            this.processAudioQueue();
+          }).catch(error => {
+            logger.error(`${this.emoji} Error playing audio: ${error.message}`);
+            this.isPlayingAudio = false;
+            this.processAudioQueue();
+          });
+        }
+      }
+    }
     
     logger.info(`${this.emoji} DinoChrome processed gift from ${data.uniqueId}: ${data.giftName} x${data.repeatCount}`);
   }
@@ -215,9 +257,11 @@ class DinoChrome extends ServiceBase {
     return {
       ...baseStatus,
       emoji: this.emoji,
-      description: 'Chrome Dino game automation with TikTok event logging',
+      description: 'Chrome Dino game automation with TikTok event logging and audio playback',
       gameStatus: this.isGameRunning ? 'Playing automatically' : 'Not running',
       browserStatus: this.browser ? 'Connected' : 'Disconnected',
+      audioStatus: this.isPlayingAudio ? 'Playing audio' : 'Audio idle',
+      audioQueueSize: this.audioQueue.length,
       eventsProcessed: this.lastActivity ? 'Active' : 'Waiting for events',
       capabilities: [
         'Chrome Dino automation',
@@ -225,9 +269,116 @@ class DinoChrome extends ServiceBase {
         'Obstacle detection',
         'Auto-restart on game over',
         'TikTok event logging',
-        'Real-time game monitoring'
+        'Real-time game monitoring',
+        'Rose gift audio playback',
+        'Sequential audio queue management'
       ]
     };
+  }
+
+  // Método para obtener un audio aleatorio de rosas
+  getRandomRoseAudio() {
+    try {
+      const audiosDir = path.join(__dirname, 'audios');
+      const files = fs.readdirSync(audiosDir)
+        .filter(file => file.startsWith('rosa-') && file.endsWith('.mp3'));
+      
+      if (files.length === 0) {
+        logger.warn(`${this.emoji} No rose audio files found in ${audiosDir}`);
+        return null;
+      }
+      
+      const randomFile = files[Math.floor(Math.random() * files.length)];
+      return path.join(audiosDir, randomFile);
+    } catch (error) {
+      logger.error(`${this.emoji} Error getting random rose audio: ${error.message}`);
+      return null;
+    }
+  }
+
+  // Método para obtener la duración del audio (estimada por tamaño de archivo)
+  async getAudioDuration(filePath) {
+    return new Promise((resolve) => {
+      try {
+        const stats = fs.statSync(filePath);
+        const fileSizeBytes = stats.size;
+        
+        // Estimación más precisa basada en archivos de audio cortos
+        // Aproximadamente 16KB por segundo para archivos MP3 cortos de calidad media
+        const estimatedDuration = (fileSizeBytes / 16000) * 1000; // En milisegundos
+        
+        // Para archivos pequeños, ajustar mínimo más realista
+        const duration = Math.max(1500, Math.min(estimatedDuration, 8000)); // Entre 1.5-8 segundos
+        
+        logger.debug(`${this.emoji} Audio duration estimated: ${Math.round(duration)}ms for ${path.basename(filePath)} (${fileSizeBytes} bytes)`);
+        resolve(duration);
+      } catch (error) {
+        logger.warn(`${this.emoji} Failed to get audio duration, using default:`, error.message);
+        resolve(3000); // 3 segundos por defecto
+      }
+    });
+  }
+
+  // Método para reproducir audio con gestión de estado
+  async playAudio(filePath) {
+    return new Promise(async (resolve) => {
+      try {
+        this.isPlayingAudio = true;
+        const platform = os.platform();
+        let command;
+        
+        if (platform === 'linux') {
+          // Para Linux/WSL, intentar diferentes comandos
+          const players = ['mpg123', 'paplay', 'aplay', 'cvlc --play-and-exit'];
+          command = `${players[0]} "${filePath}" 2>/dev/null || ${players[1]} "${filePath}" 2>/dev/null || ${players[2]} "${filePath}" 2>/dev/null || ${players[3]} "${filePath}" 2>/dev/null`;
+        } else if (platform === 'darwin') {
+          // macOS
+          command = `afplay "${filePath}"`;
+        } else if (platform === 'win32') {
+          // Windows
+          command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
+        } else {
+          logger.warn(`${this.emoji} Unsupported platform for audio playback: ${platform}`);
+          this.isPlayingAudio = false;
+          resolve();
+          return;
+        }
+        
+        // Obtener duración del audio
+        const duration = await this.getAudioDuration(filePath);
+        
+        exec(command, (error) => {
+          if (error) {
+            logger.warn(`${this.emoji} Failed to play audio: ${error.message}`);
+            this.isPlayingAudio = false;
+            resolve();
+          } else {
+            logger.info(`${this.emoji} Audio playback started: ${path.basename(filePath)} (${Math.round(duration)}ms)`);
+            // Esperar la duración del audio antes de marcar como completado
+            setTimeout(() => {
+              logger.info(`${this.emoji} Audio playback completed: ${path.basename(filePath)}`);
+              this.isPlayingAudio = false;
+              resolve();
+            }, duration);
+          }
+        });
+      } catch (error) {
+        logger.error(`${this.emoji} Error in audio playback: ${error}`);
+        this.isPlayingAudio = false;
+        resolve();
+      }
+    });
+  }
+
+  // Método para procesar la cola de audios
+  async processAudioQueue() {
+    if (this.audioQueue.length > 0 && !this.isPlayingAudio) {
+      const nextAudio = this.audioQueue.shift();
+      logger.info(`${this.emoji} Processing queued rose audio: ${path.basename(nextAudio.path)} (${this.audioQueue.length} remaining)`);
+      await this.playAudio(nextAudio.path);
+      // Recursivamente procesar el siguiente en la cola
+      this.processAudioQueue();
+    }
   }
 
   // Método para iniciar el auto-jumping con detección de obstáculos
