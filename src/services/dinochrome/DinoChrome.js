@@ -279,9 +279,9 @@ class DinoChrome extends ServiceBase {
   // Método para obtener un audio aleatorio de rosas
   getRandomRoseAudio() {
     try {
-      const audiosDir = path.join(__dirname, 'audios');
+      const audiosDir = path.join(__dirname, 'audios', 'rose');
       const files = fs.readdirSync(audiosDir)
-        .filter(file => file.startsWith('rosa-') && file.endsWith('.mp3'));
+        .filter(file => file.endsWith('.mp3'));
       
       if (files.length === 0) {
         logger.warn(`${this.emoji} No rose audio files found in ${audiosDir}`);
