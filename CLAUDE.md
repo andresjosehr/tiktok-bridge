@@ -214,6 +214,10 @@ The system uses a sophisticated modular service architecture:
   - Connection health monitoring
   - Custom addon support included in `garrys_mod_addons/`
 - **GTAV Service**: Template for GTA V/FiveM integration (extensible)
+- **DinoChrome Service**: Chrome Dino game automation with TikTok integration
+  - Cross-platform audio playback for gift/donation events
+  - Intelligent obstacle detection and auto-jumping
+  - Game state monitoring and immortality features
 
 ### Service Implementation Requirements:
 
@@ -274,3 +278,61 @@ All services should handle the standardized message format:
   priority: 100
 }
 ```
+
+## DinoChrome Audio System
+
+El servicio DinoChrome incluye un sistema de audio multiplataforma que reproduce sonidos especiales para eventos de regalo:
+
+### Compatibilidad de Plataformas
+
+**Linux/WSL:**
+- Usa `ffplay` (incluido con FFmpeg)
+- Configuración optimizada: `-nodisp -autoexit -loglevel panic -volume 100`
+
+**macOS:**
+- Usa `afplay` (incluido nativamente)
+
+**Windows:**
+- **Opción 1**: `ffplay` (si FFmpeg está instalado)
+- **Opción 2**: `wmplayer` (Windows Media Player)
+- **Opción 3**: PowerShell con `System.Windows.Media.MediaPlayer`
+
+### Instalación de Audio en Windows
+
+Para mejor rendimiento en Windows, instala FFmpeg:
+
+```batch
+# Ejecutar script de instalación
+install-windows-audio.bat
+
+# O manualmente con Chocolatey
+choco install ffmpeg -y
+
+# O con Scoop
+scoop install ffmpeg
+```
+
+### Estructura de Audios
+
+```
+src/services/dinochrome/audios/
+├── rose/           # Audios para gifts de Rose (1 moneda)
+│   ├── audio1.mp3
+│   └── audio2.mp3
+└── rosa/           # Audios para gifts de Rosa/GG (10+ monedas)
+    ├── audio1.mp3
+    └── audio2.mp3
+```
+
+### Configuración de Events
+
+- **Rose Gift (1 moneda)**: Reproduce audio aleatorio de `audios/rose/`
+- **Rosa/GG Gift (10+ monedas)**: Reproduce audio + reinicia el juego
+
+### Troubleshooting
+
+Si el audio no funciona en Windows:
+1. Verifica los logs para ver qué reproductor se detectó
+2. Instala FFmpeg para mejor compatibilidad
+3. Asegúrate de que los archivos MP3 existan en las carpetas correctas
+4. Verifica permisos de ejecución de PowerShell si es necesario

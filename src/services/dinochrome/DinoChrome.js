@@ -272,15 +272,18 @@ class DinoChrome extends ServiceBase {
     // Detectar si el regalo es un Rose o Rosa
     const giftCost = data.cost || 0;
     const giftName = data.giftName ? data.giftName.toLowerCase() : '';
+    const timestamp = new Date().toISOString();
     
     // GG para pruebas (checkeamos primero para que tenga prioridad)
     const isRosa = (giftName === 'gg' || giftName.includes('gg'));
     // Rose de 1 moneda (solo si NO es rosa y el costo es 1)
     const isRose = (!isRosa && giftName === 'rose' && giftCost === 1);
     
+    logger.info(`${this.emoji} [${timestamp}] Gift analysis - Name: "${giftName}", Cost: ${giftCost}, isRosa: ${isRosa}, isRose: ${isRose}`);
+    
     if (isRosa) {
       console.log(`🎮 ¡GG DETECTADO! Reiniciando juego y reproduciendo audio especial... 🎮`);
-      logger.info(`${this.emoji} GG detected! Cost: ${giftCost} coins, restarting game...`);
+      logger.info(`${this.emoji} [${timestamp}] GG detected! Cost: ${giftCost} coins, restarting game and playing audio...`);
       
       // Reiniciar el juego primero
       await this.restartGame();
@@ -290,10 +293,12 @@ class DinoChrome extends ServiceBase {
       
     } else if (isRose) {
       console.log(`🌹 ¡ROSE DE 1 MONEDA DETECTADA! Reproduciendo audio especial... 🌹`);
-      logger.info(`${this.emoji} Rose gift detected! Cost: ${giftCost} coins, playing audio...`);
+      logger.info(`${this.emoji} [${timestamp}] Rose gift detected! Cost: ${giftCost} coins, playing audio...`);
       
       // Reproducir audio aleatorio de la carpeta rose/
       this.playGiftAudio('rose', data);
+    } else {
+      logger.info(`${this.emoji} [${timestamp}] Gift not matching rose criteria - no audio triggered`);
     }
     
     logger.info(`${this.emoji} DinoChrome processed gift from ${data.uniqueId}: ${data.giftName} x${data.repeatCount}`);
@@ -530,31 +535,58 @@ class DinoChrome extends ServiceBase {
       return;
     }
 
-    // REPRODUCIR INMEDIATAMENTE - Sin cola, sin complicaciones
-    logger.info(`${this.emoji} Playing ${giftType} audio: ${path.basename(audioPath)}`);
-    
-    // Ejecutar de forma asíncrona - el nuevo playAudio() ya maneja todo agresivamente
-    this.playAudio(audioPath).catch(error => {
-      logger.error(`${this.emoji} Error playing audio: ${error.message}`);
+    // Agregar a la cola en lugar de interrumpir inmediatamente
+    this.audioQueue.push({
+      path: audioPath,
+      type: giftType,
+      timestamp: Date.now()
     });
+    
+    logger.info(`${this.emoji} Queued ${giftType} audio: ${path.basename(audioPath)} (queue size: ${this.audioQueue.length})`);
+    
+    // Procesar la cola si no se está reproduciendo audio
+    if (!this.isPlayingAudio) {
+      this.processAudioQueue();
+    }
   }
 
   // Método para obtener un audio aleatorio de regalos (rose o rosa)
   getRandomGiftAudio(giftType) {
+    const timestamp = new Date().toISOString();
+    
     try {
       const audiosDir = path.join(__dirname, 'audios', giftType);
+      logger.info(`${this.emoji} [${timestamp}] Looking for ${giftType} audio files in: ${audiosDir}`);
+      
+      // Verificar si el directorio existe
+      if (!fs.existsSync(audiosDir)) {
+        logger.error(`${this.emoji} [${timestamp}] Audio directory does not exist: ${audiosDir}`);
+        return null;
+      }
+      
       const files = fs.readdirSync(audiosDir)
         .filter(file => file.endsWith('.mp3'));
       
+      logger.info(`${this.emoji} [${timestamp}] Found ${files.length} MP3 files in ${giftType} directory: [${files.join(', ')}]`);
+      
       if (files.length === 0) {
-        logger.warn(`${this.emoji} No ${giftType} audio files found in ${audiosDir}`);
+        logger.warn(`${this.emoji} [${timestamp}] No ${giftType} audio files found in ${audiosDir}`);
         return null;
       }
       
       const randomFile = files[Math.floor(Math.random() * files.length)];
-      return path.join(audiosDir, randomFile);
+      const fullPath = path.join(audiosDir, randomFile);
+      
+      // Verificar que el archivo existe
+      if (!fs.existsSync(fullPath)) {
+        logger.error(`${this.emoji} [${timestamp}] Selected audio file does not exist: ${fullPath}`);
+        return null;
+      }
+      
+      logger.info(`${this.emoji} [${timestamp}] Selected random ${giftType} audio: ${randomFile} (${fullPath})`);
+      return fullPath;
     } catch (error) {
-      logger.error(`${this.emoji} Error getting random ${giftType} audio: ${error.message}`);
+      logger.error(`${this.emoji} [${timestamp}] Error getting random ${giftType} audio: ${error.message}`);
       return null;
     }
   }
@@ -571,18 +603,19 @@ class DinoChrome extends ServiceBase {
         const stats = fs.statSync(filePath);
         const fileSizeBytes = stats.size;
         
-        // Estimación más precisa basada en archivos de audio cortos
-        // Aproximadamente 16KB por segundo para archivos MP3 cortos de calidad media
-        const estimatedDuration = (fileSizeBytes / 16000) * 1000; // En milisegundos
+        // Estimación mejorada: MP3 típico 128kbps = ~16KB/seg, pero ser más generosos
+        const estimatedDuration = (fileSizeBytes / 12000) * 1000; // 12KB/seg para ser más generosos
         
-        // Para archivos pequeños, ajustar mínimo más realista
-        const duration = Math.max(1500, Math.min(estimatedDuration, 8000)); // Entre 1.5-8 segundos
+        // Rangos más amplios para evitar cortes prematuros
+        const duration = Math.max(2000, Math.min(estimatedDuration, 15000)); // Entre 2-15 segundos
         
-        logger.debug(`${this.emoji} Audio duration estimated: ${Math.round(duration)}ms for ${path.basename(filePath)} (${fileSizeBytes} bytes)`);
+        const timestamp = new Date().toISOString();
+        logger.info(`${this.emoji} [${timestamp}] Audio duration estimated: ${Math.round(duration)}ms for ${path.basename(filePath)} (${fileSizeBytes} bytes, ${(fileSizeBytes/1024).toFixed(1)}KB)`);
         resolve(duration);
       } catch (error) {
-        logger.warn(`${this.emoji} Failed to get audio duration, using default:`, error.message);
-        resolve(3000); // 3 segundos por defecto
+        const timestamp = new Date().toISOString();
+        logger.warn(`${this.emoji} [${timestamp}] Failed to get audio duration, using default: ${error.message}`);
+        resolve(5000); // 5 segundos por defecto más generoso
       }
     });
   }
@@ -638,6 +671,17 @@ class DinoChrome extends ServiceBase {
         await new Promise(resolve => {
           exec('pkill -9 afplay', () => resolve());
         });
+      } else if (platform === 'win32') {
+        // Limpieza para Windows
+        await new Promise(resolve => {
+          exec('taskkill /F /IM ffplay.exe 2>nul', () => resolve());
+        });
+        await new Promise(resolve => {
+          exec('taskkill /F /IM wmplayer.exe 2>nul', () => resolve());
+        });
+        await new Promise(resolve => {
+          exec('taskkill /F /IM powershell.exe /FI "WINDOWTITLE eq Windows PowerShell" 2>nul', () => resolve());
+        });
       }
       
       // Limpiar registros internos
@@ -651,21 +695,40 @@ class DinoChrome extends ServiceBase {
     }
   }
 
-  // Método ULTRA SIMPLE para reproducir audio - UN SOLO PROCESO
+  // Método para detectar la mejor opción de audio en Windows
+  async detectWindowsAudioPlayer() {
+    const { execSync } = require('child_process');
+    
+    // Prioridad: ffplay > wmplayer > powershell
+    try {
+      execSync('ffplay -version', { stdio: 'ignore' });
+      return { command: 'ffplay', args: ['-nodisp', '-autoexit', '-loglevel', 'panic', '-volume', '100'] };
+    } catch (e) {
+      try {
+        execSync('wmplayer /?', { stdio: 'ignore' });
+        return { command: 'wmplayer', args: ['/close'] };
+      } catch (e) {
+        return { 
+          command: 'powershell', 
+          args: ['-ExecutionPolicy', 'Bypass', '-Command'] 
+        };
+      }
+    }
+  }
+
+  // Método MEJORADO para reproducir audio sin interrupciones
   async playAudio(filePath) {
     return new Promise(async (resolve) => {
+      const startTimestamp = new Date().toISOString();
+      const fileName = path.basename(filePath);
+      
       try {
-        // STEP 1: MATAR cualquier audio anterior inmediatamente
-        if (this.currentAudioProcess && !this.currentAudioProcess.killed) {
-          try {
-            this.currentAudioProcess.kill('SIGKILL'); // Forzar SIGKILL inmediato
-          } catch (e) {}
-        }
+        logger.info(`${this.emoji} [${startTimestamp}] Starting audio playback: ${fileName}`);
         
-        // STEP 2: Limpieza agresiva del sistema
-        await this.forceAudioCleanup();
+        // Solo limpiar procesos muertos, no matar audio en progreso
+        this.cleanupDeadProcesses();
         
-        // STEP 3: Marcar como ocupado
+        // Marcar como ocupado
         this.isPlayingAudio = true;
         
         const platform = os.platform();
@@ -673,14 +736,37 @@ class DinoChrome extends ServiceBase {
         
         if (platform === 'linux') {
           command = 'ffplay';
-          args = ['-nodisp', '-autoexit', '-loglevel', 'panic', '-volume', '100', filePath];
+          args = ['-nodisp', '-autoexit', '-loglevel', 'quiet', '-volume', '100', filePath];
         } else if (platform === 'darwin') {
           command = 'afplay';
           args = [filePath];
         } else if (platform === 'win32') {
-          command = 'powershell';
-          args = ['-c', `$player = New-Object Media.SoundPlayer '${filePath}'; $player.PlaySync()`];
+          const windowsPlayer = await this.detectWindowsAudioPlayer();
+          command = windowsPlayer.command;
+          
+          if (command === 'ffplay') {
+            args = [...windowsPlayer.args, filePath];
+            logger.info(`${this.emoji} [${startTimestamp}] Using ffplay for Windows audio playback`);
+          } else if (command === 'wmplayer') {
+            args = [...windowsPlayer.args, filePath];
+            logger.info(`${this.emoji} [${startTimestamp}] Using wmplayer for Windows audio playback`);
+          } else {
+            const escapedPath = filePath.replace(/\\/g, '\\\\').replace(/'/g, "''");
+            const powershellScript = `
+              Add-Type -AssemblyName presentationCore;
+              $mediaPlayer = New-Object System.Windows.Media.MediaPlayer;
+              $mediaPlayer.Open([System.Uri]::new('file:///${escapedPath}'));
+              $mediaPlayer.Play();
+              Start-Sleep -Seconds 10;
+              $mediaPlayer.Stop();
+              $mediaPlayer.Close();
+            `.replace(/\s+/g, ' ').trim();
+            
+            args = [...windowsPlayer.args, powershellScript];
+            logger.info(`${this.emoji} [${startTimestamp}] Using PowerShell MediaPlayer for Windows audio playback`);
+          }
         } else {
+          logger.warn(`${this.emoji} [${startTimestamp}] Unsupported platform: ${platform}`);
           this.isPlayingAudio = false;
           resolve();
           return;
@@ -689,48 +775,93 @@ class DinoChrome extends ServiceBase {
         const duration = await this.getAudioDuration(filePath);
         const { spawn } = require('child_process');
         
-        // STEP 4: Crear NUEVO proceso
+        // Crear proceso con logging detallado
         this.currentAudioProcess = spawn(command, args, {
-          stdio: ['ignore', 'ignore', 'ignore'], // Suprimir TODA salida
-          detached: false // Mantener control directo
+          stdio: ['ignore', 'pipe', 'pipe'], // Capturar stdout y stderr para debugging
+          detached: false
         });
         
         const pid = this.currentAudioProcess.pid;
-        this.activeAudioProcesses.set(pid, {
+        const processInfo = {
           startTime: Date.now(),
-          filePath: path.basename(filePath),
-          process: this.currentAudioProcess
+          filePath: fileName,
+          process: this.currentAudioProcess,
+          duration: duration
+        };
+        
+        this.activeAudioProcesses.set(pid, processInfo);
+        
+        // Capturar output para debugging
+        this.currentAudioProcess.stdout?.on('data', (data) => {
+          logger.debug(`${this.emoji} [${new Date().toISOString()}] Audio stdout: ${data.toString().trim()}`);
+        });
+        
+        this.currentAudioProcess.stderr?.on('data', (data) => {
+          logger.debug(`${this.emoji} [${new Date().toISOString()}] Audio stderr: ${data.toString().trim()}`);
         });
         
         let resolved = false;
-        const finish = () => {
+        const finish = (reason) => {
           if (!resolved) {
             resolved = true;
+            const endTimestamp = new Date().toISOString();
+            const playTime = Date.now() - processInfo.startTime;
+            
+            logger.info(`${this.emoji} [${endTimestamp}] Audio finished: ${fileName} after ${playTime}ms (${reason})`);
+            
             this.isPlayingAudio = false;
             this.currentAudioProcess = null;
+            this.activeAudioProcesses.delete(pid);
+            
+            // Procesar siguiente audio en la cola después de una pausa breve
+            setTimeout(() => {
+              this.processAudioQueue();
+            }, 200);
+            
             resolve();
           }
         };
         
-        // Eventos del proceso
-        this.currentAudioProcess.on('close', finish);
-        this.currentAudioProcess.on('error', finish);
-        this.currentAudioProcess.on('exit', finish);
+        // Eventos del proceso con logging detallado
+        this.currentAudioProcess.on('close', (code) => {
+          logger.info(`${this.emoji} [${new Date().toISOString()}] Audio process closed with code: ${code}`);
+          finish('process closed');
+        });
         
-        // Timeout AGRESIVO - matar si se pasa
-        const maxTimeout = Math.min(duration + 1000, 5000); // Máximo 5 segundos
-        setTimeout(() => {
+        this.currentAudioProcess.on('error', (error) => {
+          logger.error(`${this.emoji} [${new Date().toISOString()}] Audio process error: ${error.message}`);
+          finish('process error');
+        });
+        
+        this.currentAudioProcess.on('exit', (code, signal) => {
+          logger.info(`${this.emoji} [${new Date().toISOString()}] Audio process exited with code: ${code}, signal: ${signal}`);
+          finish('process exit');
+        });
+        
+        // Timeout más generoso basado en duración estimada + margen
+        const timeoutDuration = duration + 3000; // Duración + 3 segundos de margen
+        const timeoutHandler = setTimeout(() => {
           if (!resolved && this.currentAudioProcess && !this.currentAudioProcess.killed) {
-            this.currentAudioProcess.kill('SIGKILL');
-            logger.warn(`${this.emoji} KILLED audio after ${maxTimeout}ms: ${path.basename(filePath)}`);
-            finish();
+            logger.warn(`${this.emoji} [${new Date().toISOString()}] Audio timeout after ${timeoutDuration}ms, killing process: ${fileName}`);
+            this.currentAudioProcess.kill('SIGTERM'); // Usar SIGTERM primero, más gentil que SIGKILL
+            
+            // Si no termina en 1 segundo, usar SIGKILL
+            setTimeout(() => {
+              if (!resolved && this.currentAudioProcess && !this.currentAudioProcess.killed) {
+                logger.warn(`${this.emoji} [${new Date().toISOString()}] Force killing audio process: ${fileName}`);
+                this.currentAudioProcess.kill('SIGKILL');
+              }
+            }, 1000);
+            
+            finish('timeout');
           }
-        }, maxTimeout);
+        }, timeoutDuration);
         
-        logger.info(`${this.emoji} Audio started: ${path.basename(filePath)} (PID: ${pid}, max: ${maxTimeout}ms)`);
+        logger.info(`${this.emoji} [${startTimestamp}] Audio process started: ${fileName} (PID: ${pid}, estimated duration: ${duration}ms, timeout: ${timeoutDuration}ms)`);
         
       } catch (error) {
-        logger.error(`${this.emoji} Audio error: ${error.message}`);
+        const errorTimestamp = new Date().toISOString();
+        logger.error(`${this.emoji} [${errorTimestamp}] Audio playback error for ${fileName}: ${error.message}`);
         this.isPlayingAudio = false;
         this.currentAudioProcess = null;
         resolve();
@@ -738,13 +869,55 @@ class DinoChrome extends ServiceBase {
     });
   }
 
-  // Método para procesar la cola de audios - SIMPLIFICADO
+  // Método para procesar la cola de audios con timestamps
   async processAudioQueue() {
-    // En el nuevo sistema, no usamos cola - cada audio se reproduce inmediatamente
-    // Limpiar cualquier cola restante del sistema anterior
-    if (this.audioQueue.length > 0) {
-      logger.info(`${this.emoji} Clearing audio queue (${this.audioQueue.length} items) - using immediate playback now`);
-      this.audioQueue = [];
+    const timestamp = new Date().toISOString();
+    
+    if (this.isPlayingAudio) {
+      logger.debug(`${this.emoji} [${timestamp}] Audio still playing, queue processing delayed (queue size: ${this.audioQueue.length})`);
+      return;
+    }
+    
+    if (this.audioQueue.length === 0) {
+      logger.debug(`${this.emoji} [${timestamp}] Audio queue empty`);
+      return;
+    }
+    
+    const nextAudio = this.audioQueue.shift();
+    const queueAge = Date.now() - nextAudio.timestamp;
+    
+    logger.info(`${this.emoji} [${timestamp}] Processing queued audio: ${path.basename(nextAudio.path)} (age: ${queueAge}ms, remaining in queue: ${this.audioQueue.length})`);
+    
+    try {
+      await this.playAudio(nextAudio.path);
+    } catch (error) {
+      logger.error(`${this.emoji} [${timestamp}] Error playing queued audio: ${error.message}`);
+      // Continuar con el siguiente audio después de una pausa
+      setTimeout(() => {
+        this.processAudioQueue();
+      }, 500);
+    }
+  }
+
+  // Método para limpiar solo procesos muertos sin interrumpir audio activo
+  cleanupDeadProcesses() {
+    const timestamp = new Date().toISOString();
+    let cleanedCount = 0;
+    
+    for (const [pid, info] of this.activeAudioProcesses.entries()) {
+      try {
+        // Verificar si el proceso aún existe sin matarlo
+        process.kill(pid, 0); // Signal 0 solo verifica existencia
+      } catch (error) {
+        // Si falla, el proceso ya no existe
+        this.activeAudioProcesses.delete(pid);
+        cleanedCount++;
+        logger.debug(`${this.emoji} [${timestamp}] Cleaned dead audio process: ${info.filePath} (PID: ${pid})`);
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      logger.info(`${this.emoji} [${timestamp}] Cleaned ${cleanedCount} dead audio processes`);
     }
   }
 
