@@ -354,6 +354,14 @@ class QueueProcessorManager {
     logger.info(`Starting queue processor with ${this.activeServiceType} service`);
     
     try {
+      // Conectar el servicio activo antes de iniciar el procesamiento
+      const activeService = this.services.get(this.activeServiceType);
+      if (activeService && typeof activeService.connect === 'function') {
+        logger.info(`Connecting ${this.activeServiceType} service...`);
+        await activeService.connect();
+        logger.info(`${this.activeServiceType} service connected successfully`);
+      }
+      
       await this.queueProcessor.start();
       logger.info('Queue processor started successfully');
     } catch (error) {
@@ -374,6 +382,15 @@ class QueueProcessorManager {
     
     try {
       await this.queueProcessor.stop();
+      
+      // Desconectar el servicio activo
+      const activeService = this.services.get(this.activeServiceType);
+      if (activeService && typeof activeService.disconnect === 'function') {
+        logger.info(`Disconnecting ${this.activeServiceType} service...`);
+        await activeService.disconnect();
+        logger.info(`${this.activeServiceType} service disconnected successfully`);
+      }
+      
       logger.info('Queue processor stopped successfully');
     } catch (error) {
       logger.error('Failed to stop queue processor:', error);
