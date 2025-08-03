@@ -95,13 +95,31 @@ class TikTokService {
     });
 
     this.connection.on('gift', (data) => {
-      logger.debug(`Gift: ${data.giftName} x${data.repeatCount} by ${data.uniqueId}`);
+      // Manejo especial para gifts con repeatEnd según documentación de tiktok-live-connector
+      const isStreakable = data.giftType === 1;
+      const isRepeatEnd = data.repeatEnd || false;
+      
+      // SIEMPRE registrar el evento en la cola, pero con diferentes logs
+      let logMessage;
+      if (isStreakable && !isRepeatEnd) {
+        logMessage = `Gift streak in progress: ${data.giftName} x${data.repeatCount} by ${data.uniqueId} (will be queued but may be skipped by some services)`;
+      } else if (isStreakable && isRepeatEnd) {
+        logMessage = `Gift streak ended: ${data.giftName} x${data.repeatCount} by ${data.uniqueId}`;
+      } else {
+        logMessage = `Gift: ${data.giftName} x${data.repeatCount} by ${data.uniqueId}`;
+      }
+      
+      logger.debug(logMessage);
+      
+      // SIEMPRE emitir el evento - que cada servicio decida si procesarlo
       eventManager.emit('tiktok:gift', {
         user: data.uniqueId,
         giftName: data.giftName,
         giftId: data.giftId,
         repeatCount: data.repeatCount,
         cost: data.diamondCount,
+        giftType: data.giftType,
+        repeatEnd: isRepeatEnd,
         timestamp: new Date().toISOString()
       });
     });

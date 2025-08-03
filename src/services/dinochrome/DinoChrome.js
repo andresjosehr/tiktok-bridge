@@ -25,6 +25,10 @@ class DinoChrome extends ServiceBase {
     this.audioCleanupInterval = null; // Limpieza periódica
     this.highScore = 0; // Récord máximo de la sesión
     this.currentScore = 0; // Puntuación actual
+    
+    // Configurar DinoChrome para procesar solo eventos finales de rachas de gifts
+    this.setProcessOnlyFinalGifts(false);
+    
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }
 
@@ -1317,8 +1321,7 @@ class DinoChrome extends ServiceBase {
           // Actualizar récord si es necesario
           if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
-            console.log(`🏆 ¡NUEVO RÉCORD! ${this.highScore} puntos`);
-            logger.info(`${this.emoji} New session high score: ${this.highScore}`);
+            // logger.info(`${this.emoji} New session high score: ${this.highScore}`);
           }
           
           if (gameStatus.crashed && this.isGameRunning) {

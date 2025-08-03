@@ -27,17 +27,25 @@ class QueueManager {
       
       await this.enforceQueueLimits(eventType, priority);
       
+      // Determinar repeat_end basado en el tipo de evento y datos
+      let repeatEnd = null; // Por defecto NULL para eventos que no son gifts
+      if (eventType === 'tiktok:gift' && eventData.repeatEnd !== undefined) {
+        repeatEnd = eventData.repeatEnd;
+      }
+      
       const EventQueue = orm.getModel('EventQueue');
       const queueItem = await EventQueue.create({
         event_type: eventType,
         event_data: eventData,
         priority: priority,
-        max_attempts: maxAttempts
+        max_attempts: maxAttempts,
+        repeat_end: repeatEnd
       });
       
       const queueId = queueItem.id;
       
-      logger.debug(`Event added to queue: ${eventType} (ID: ${queueId}, Priority: ${priority})`);
+      const repeatEndMsg = repeatEnd !== null ? `, repeat_end: ${repeatEnd}` : '';
+      logger.debug(`Event added to queue: ${eventType} (ID: ${queueId}, Priority: ${priority}${repeatEndMsg})`);
       
       // Notificar a todos los procesadores que hay un nuevo trabajo
       this.notifyProcessors();

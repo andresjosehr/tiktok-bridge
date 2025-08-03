@@ -60,6 +60,11 @@ module.exports = (sequelize) => {
     processed_at: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    repeat_end: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      comment: 'Indica si este evento es el final de una racha de regalos (true), parte de una racha (false), o no aplica (NULL para eventos que no son gifts)'
     }
   }, {
     tableName: 'event_queue',
@@ -75,6 +80,10 @@ module.exports = (sequelize) => {
       {
         name: 'idx_created_at',
         fields: ['created_at']
+      },
+      {
+        name: 'idx_repeat_end',
+        fields: ['repeat_end']
       }
     ],
     scopes: {

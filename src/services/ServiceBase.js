@@ -6,6 +6,7 @@ class ServiceBase {
     this._isConnected = false;
     this.connectedAt = null;
     this.lastActivity = null;
+    this.processOnlyFinalGifts = false; // Por defecto procesar todos los gifts
   }
 
   async handleTikTokChat(data) {
@@ -60,6 +61,28 @@ class ServiceBase {
     } else {
       this.connectedAt = null;
     }
+  }
+
+  // Método para configurar si el servicio solo procesa eventos finales de rachas de gifts
+  setProcessOnlyFinalGifts(onlyFinal) {
+    this.processOnlyFinalGifts = onlyFinal;
+    logger.info(`${this.serviceName}: Process only final gifts set to ${onlyFinal}`);
+  }
+
+  // Método para verificar si el servicio debe procesar un evento de gift
+  shouldProcessGift(eventData, queueData) {
+    // Si el servicio no está configurado para procesar solo finales, procesar todos
+    if (!this.processOnlyFinalGifts) {
+      return true;
+    }
+
+    // Si está configurado para solo finales, verificar repeat_end
+    const repeatEnd = queueData?.repeat_end;
+    
+    // Si repeat_end es null (evento no-streakable), procesar
+    // Si repeat_end es true (final de racha), procesar
+    // Si repeat_end es false (parte de racha en progreso), NO procesar
+    return repeatEnd !== false;
   }
 }
 

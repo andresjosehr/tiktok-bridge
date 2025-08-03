@@ -146,6 +146,15 @@ class QueueProcessor {
         throw new Error(`No handler found for event type: ${job.event_type}`);
       }
       
+      // Verificar si el servicio debe procesar este evento de gift
+      if (job.event_type === 'tiktok:gift' && typeof this.activeService.shouldProcessGift === 'function') {
+        if (!this.activeService.shouldProcessGift(job.event_data, job)) {
+          const error = new Error(`Gift event skipped: repeat_end=${job.repeat_end} (service only processes final gifts)`);
+          error.isSkipped = true;
+          throw error;
+        }
+      }
+      
       await handler(job.event_data);
       
       const executionTime = Date.now() - startTime;

@@ -243,6 +243,7 @@ Each service must extend `ServiceBase` and implement:
 - AI-powered responses using `aiService`
 - Custom message formatting
 - Webhook notifications
+- **Gift Streak Handling**: Configure processing of TikTok gift streaks using `setProcessOnlyFinalGifts(true)`
 
 ### Adding New Services:
 1. Create service directory: `src/services/newgame/`
@@ -265,6 +266,32 @@ const audioInfo = await modularTTS.generateMessageAudio('follow', {
 });
 ```
 
+### Gift Streak Handling:
+
+TikTok gifts can be sent in streaks (e.g., sending 10 roses rapidly). The system handles this intelligently:
+
+**Database Support:**
+- `event_queue.repeat_end` column indicates streak status:
+  - `true`: Final event of a streak (process normally)
+  - `false`: Intermediate event in a streak (may be skipped by some services)
+  - `NULL`: Non-streakable gift or other events (process normally)
+
+**Service Configuration:**
+```javascript
+// In service constructor
+this.setProcessOnlyFinalGifts(true); // Only process final events of streaks
+
+// Services can override shouldProcessGift() for custom logic
+shouldProcessGift(eventData, queueData) {
+  return this.processOnlyFinalGifts ? queueData.repeat_end !== false : true;
+}
+```
+
+**Example Usage:**
+- **DinoChrome**: Uses `setProcessOnlyFinalGifts(true)` to avoid playing audio for every gift in a 10-gift streak
+- **GMod/GTAV**: Can process all gifts (default behavior) for real-time feedback
+- **Webhook Services**: Can choose based on integration requirements
+
 ### Message Format Compatibility:
 All services should handle the standardized message format:
 ```javascript
@@ -272,7 +299,7 @@ All services should handle the standardized message format:
   type: 'tiktok_event_type',
   data: {
     user: 'username',
-    // event-specific data
+    // event-specific data including giftType, repeatEnd for gifts
   },
   timestamp: '2025-01-01T12:00:00.000Z',
   priority: 100
