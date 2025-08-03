@@ -32,6 +32,7 @@
     "puppeteer": "^24.15.0",
     "rcon": "^1.1.0",
     "rcon-srcds": "^2.1.0",
+    "selenium-webdriver": "^4.34.0",
     "sequelize": "^6.35.0",
     "tiktok-live-connector": "^1.1.6",
     "winston": "^3.10.0",

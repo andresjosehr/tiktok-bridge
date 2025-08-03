@@ -60,7 +60,7 @@ class QueueManager {
     if (currentQueueSize >= this.maxQueueSize) {
       if (this.isGiftEvent(eventType)) {
         const removedCount = await this.makeRoomForGiftEvent();
-        logger.info(`Queue full, removed ${removedCount} non-gift events to make room for gift`);
+        // logger.info(`Queue full, removed ${removedCount} non-gift events to make room for gift`);
       } else {
         if (priority < 50) {
           const error = new Error(`Queue is full (${currentQueueSize}/${this.maxQueueSize}) and event priority is too low`);
@@ -70,7 +70,7 @@ class QueueManager {
         
         const EventQueue = orm.getModel('EventQueue');
         const removedCount = await EventQueue.removeOldestNonGiftEvents(1);
-        logger.info(`Queue full, removed ${removedCount} low-priority events`);
+        // logger.info(`Queue full, removed ${removedCount} low-priority events`);
       }
     }
   }

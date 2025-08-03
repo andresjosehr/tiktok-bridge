@@ -60,7 +60,7 @@ class EventManager extends EventEmitter {
       await queueManager.addEvent('tiktok:chat', data);
     } catch (error) {
       if (error.isQueueFull) {
-        logger.info('Queue full, skipping chat event (priority too low)');
+        // logger.info('Queue full, skipping chat event (priority too low)');
       } else {
         logger.error('Failed to add chat event to queue:', error);
       }
@@ -103,7 +103,7 @@ class EventManager extends EventEmitter {
       await queueManager.addEvent('tiktok:like', data);
     } catch (error) {
       if (error.isQueueFull) {
-        logger.info('Queue full, skipping like event (priority too low)');
+        // logger.info('Queue full, skipping like event (priority too low)');
       } else {
         logger.error('Failed to add like event to queue:', error);
       }
@@ -115,7 +115,7 @@ class EventManager extends EventEmitter {
       await queueManager.addEvent('tiktok:share', data);
     } catch (error) {
       if (error.isQueueFull) {
-        logger.info('Queue full, skipping share event (priority too low)');
+        // logger.info('Queue full, skipping share event (priority too low)');
       } else {
         logger.error('Failed to add share event to queue:', error);
       }
@@ -127,7 +127,7 @@ class EventManager extends EventEmitter {
       await queueManager.addEvent('tiktok:viewerCount', data);
     } catch (error) {
       if (error.isQueueFull) {
-        logger.info('Queue full, skipping viewer count event (priority too low)');
+        // logger.info('Queue full, skipping viewer count event (priority too low)');
       } else {
         logger.error('Failed to add viewer count event to queue:', error);
       }
