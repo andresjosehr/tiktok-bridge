@@ -28,13 +28,15 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 👍 Likes:              Prioridad 5
 👀 Viewer Count:       Prioridad 1
 ```
+**Sistema de TTS Modular**: Prioridad especial para usernames con cache inteligente
 
-### 🗄️ Base de Datos y Migraciones
-- **Sistema de migraciones** similar a Laravel
-- **ORM integrado** para consultas type-safe
-- **Logs detallados** de todos los eventos procesados
-- **Estadísticas de rendimiento** y métricas de cola
-- **Limpieza automática** de eventos antiguos
+### 🗄️ Base de Datos y Persistencia
+- **Sistema de migraciones** estilo Laravel con up/down methods
+- **ORM dual**: Custom ORM + Sequelize para máxima flexibilidad
+- **Logs detallados** de todos los eventos con timestamps
+- **Estadísticas de rendimiento** en tiempo real
+- **Cache de audio inteligente** con cleanup automático
+- **Limpieza automática** de eventos y archivos temporales
 
 ### 🎮 Servicios de Juegos Soportados
 - **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real
@@ -49,11 +51,12 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 - **Monitor de cola** con métricas visuales
 - **Panel de control** para gestión de eventos
 
-### 🤖 Servicios Externos (Preparado para futuro)
-- **TTS (Text-to-Speech)**: ElevenLabs, OpenAI, Azure, Google
-- **IA Conversacional**: OpenAI, Anthropic, Google, Local
-- **Webhooks**: Discord, Custom endpoints
-- **Moderación de contenido** automática
+### 🤖 Servicios Externos Implementados
+- **TTS (Text-to-Speech)**: ElevenLabs, OpenAI TTS, Azure Cognitive Services, Google Cloud TTS
+- **TTS Modular**: Sistema avanzado con cache, composición de mensajes y combinación de audio
+- **IA Conversacional**: OpenAI GPT, Anthropic Claude, Google Gemini, Modelos Locales
+- **Webhooks**: Discord, Custom endpoints con reintentos automáticos
+- **Moderación de contenido** configurable por flags de funcionalidades
 
 ## 📋 Requisitos
 
@@ -258,18 +261,59 @@ DB_DATABASE=garrys_tiktok
 QUEUE_MAX_SIZE=1000
 QUEUE_BATCH_SIZE=1
 QUEUE_MAX_ATTEMPTS=3
-QUEUE_ACTIVE_SERVICE=gmod
+QUEUE_ENABLED_PROCESSORS=gmod,gtav
+QUEUE_PROCESSING_DELAY=100
+QUEUE_AUTO_START=true
+QUEUE_CLEANUP_INTERVAL=3600000
+QUEUE_OPTIMIZATION_INTERVAL=1800000
 
 # TikTok
 TIKTOK_USERNAME=tu_usuario
+TIKTOK_SESSION_ID=optional_session_id
 TIKTOK_MAX_RECONNECT_ATTEMPTS=5
+TIKTOK_RECONNECT_DELAY=5000
+
+# Garry's Mod
+GMOD_HOST=localhost
+GMOD_RCON_PORT=27015
+GMOD_RCON_PASSWORD=password
+GMOD_WS_PORT=27015
+GMOD_HTTP_PORT=27016
+GMOD_ENABLED=true
+GMOD_RECONNECT_INTERVAL=30000
 
 # Logging
 LOG_LEVEL=info
 LOG_FILE=logs/app.log
+LOG_MAX_SIZE=10m
+LOG_MAX_FILES=5
+
+# TTS Configuration
+TTS_ENABLED=true
+TTS_DEFAULT_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=your_api_key
+ELEVENLABS_VOICE_ID=voice_id
+ELEVENLABS_STABILITY=0.5
+ELEVENLABS_SPEED=1.0
+
+# AI Configuration
+AI_ENABLED=true
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+GOOGLE_AI_API_KEY=your_google_key
+
+# Webhooks
+WEBHOOKS_ENABLED=true
+DISCORD_WEBHOOK_URL=your_discord_webhook
+
+# Feature Flags
+FEATURE_AI_CHAT_RESPONSES=true
+FEATURE_TTS_ANNOUNCEMENTS=true
+FEATURE_CONTENT_MODERATION=true
+FEATURE_GIFT_NOTIFICATIONS=true
 ```
 
-### Configuración de Prioridades
+### Configuración de Prioridades y TTS
 ```javascript
 // En src/queue/queueManager.js
 this.eventPriorities = {
@@ -282,6 +326,13 @@ this.eventPriorities = {
   'tiktok:viewerCount': 1,   // Mínima prioridad
   'default': 0
 };
+
+// Sistema TTS Modular
+// - Cache inteligente para partes estáticas
+// - Generación dinámica para usernames
+// - Combinación automática de audio con FFmpeg
+// - Pre-generación de mensajes comunes
+// - Limpieza automática de archivos temporales
 ```
 
 ## 🔧 Desarrollo
@@ -322,11 +373,22 @@ npm run migrate
 3. Integrar en `eventManager.js`
 4. Actualizar frontend si es necesario
 
-### Agregar Nuevo Servicio (ej. FiveM, CS2)
-1. Crear nuevo servicio extendiendo `ServiceBase`
-2. Implementar todos los métodos requeridos (`handleTikTokChat`, `handleTikTokGift`, etc.)
-3. Registrar servicio en `QueueProcessorManager.initializeServices()`
-4. Configurar mediante `QUEUE_ACTIVE_SERVICE` environment variable
+### Agregar Nuevo Servicio (ej. FiveM, CS2, Minecraft)
+1. Crear nuevo servicio extendiendo `ServiceBase` en `src/services/nuevo_juego/`
+2. Implementar todos los métodos requeridos:
+   - `handleTikTokChat`, `handleTikTokGift`, `handleTikTokFollow`
+   - `handleTikTokShare`, `handleTikTokLike`, `handleTikTokViewerCount`
+   - `connect`, `disconnect`, `isConnected`, `getStatus`
+3. Registrar servicio en `src/queue/queueProcessor.js`
+4. Agregar al array `QUEUE_ENABLED_PROCESSORS` en configuración
+5. Configurar variables de entorno específicas del juego
+
+### Sistema TTS Modular
+- **Configuración**: `src/services/gmod/gmod-tts-modular.json`
+- **Cache**: Audio estático en `audio_cache/parts/`
+- **Dinámico**: Usernames en `audio_cache/usernames/`
+- **Combinación**: FFmpeg para concatenar audio
+- **Proveedores**: ElevenLabs, OpenAI, Azure, Google TTS
 
 ## 📈 Monitoreo y Métricas
 

@@ -3,8 +3,8 @@ const logger = require('../utils/logger');
 const config = require('../config/config');
 const EventEmitter = require('events');
 const queueManager = require('./queueManager');
-const gmodServiceInstance = require('../services/gmod/gmodServiceInstance');
-const GTAVService = require('../services/gtav/GTAVService');
+// Lazy loading de servicios para evitar inicialización automática
+const DinoChrome = require('../services/dinochrome/DinoChrome');
 
 class QueueProcessor {
   constructor(activeService) {
@@ -295,9 +295,36 @@ class QueueProcessorManager {
   }
 
   initializeServices() {
-    // Inicializar todos los servicios disponibles
-    this.services.set('gmod', gmodServiceInstance);
-    this.services.set('gtav', new GTAVService());
+    // Solo inicializar servicios que están habilitados para evitar conexiones innecesarias
+    logger.info(`Initializing only enabled services: ${this.enabledProcessors.join(', ')}`);
+    
+    this.enabledProcessors.forEach(serviceType => {
+      try {
+        switch(serviceType) {
+          case 'gmod':
+            const gmodServiceInstance = require('../services/gmod/gmodServiceInstance');
+            this.services.set('gmod', gmodServiceInstance);
+            logger.info('✅ GMod service loaded');
+            break;
+            
+          case 'gtav':
+            const GTAVService = require('../services/gtav/GTAVService');
+            this.services.set('gtav', new GTAVService());
+            logger.info('✅ GTAV service loaded');
+            break;
+            
+          case 'dinochrome':
+            this.services.set('dinochrome', new DinoChrome());
+            logger.info('✅ DinoChrome service loaded');
+            break;
+            
+          default:
+            logger.warn(`❌ Unknown service type: ${serviceType}`);
+        }
+      } catch (error) {
+        logger.error(`❌ Failed to load service ${serviceType}:`, error);
+      }
+    });
     
     // Solo activar los servicios que están habilitados en la configuración
     logger.info(`Enabled processors from config: ${this.enabledProcessors.join(', ')}`);

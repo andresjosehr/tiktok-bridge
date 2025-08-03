@@ -4,7 +4,7 @@ const queueProcessor = require('../queue/queueProcessor');
 const queueManager = require('../queue/queueManager');
 const db = require('../database/connection');
 const orm = require('../database/orm');
-const gmodService = require('../services/gmod/gmodServiceInstance');
+// Services are loaded dynamically by queueProcessor
 const logger = require('../utils/logger');
 const config = require('../config/config');
 const cron = require('node-cron');
@@ -166,9 +166,8 @@ async function startWorker(options = {}) {
     console.log('🔄 Initializing ORM...');
     await orm.initialize();
     
-    // Initialize services
-    console.log('🔄 Initializing services...');
-    await gmodService.initialize();
+    // Services are initialized automatically by queueProcessor
+    console.log('📋 Services will be loaded based on configuration...');
     
     // Configure processor
     if (options.batchSize) {
@@ -234,7 +233,6 @@ async function handleShutdown() {
   
   try {
     await queueProcessor.gracefulShutdown();
-    await gmodService.disconnect();
     await orm.close();
     await db.close();
     console.log('✅ Queue worker stopped gracefully');

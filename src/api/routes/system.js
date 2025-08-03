@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const tiktokService = require('../../services/tiktok/tiktokService');
-const gmodService = require('../../services/gmod/gmodServiceInstance');
+const queueProcessor = require('../../queue/queueProcessor');
 const queueManager = require('../../queue/queueManager');
 const eventManager = require('../../services/eventManager');
 const logger = require('../../utils/logger');
@@ -32,10 +32,7 @@ router.get('/overview', async (req, res) => {
           connected: tiktokService.isConnected(),
           uptime: tiktokService.getUptime()
         },
-        gmod: {
-          connected: gmodService.isConnected(),
-          uptime: gmodService.getUptime()
-        }
+        activeService: await queueProcessor.getProcessorStatus()
       },
       queue: await queueManager.getQueueStatus(),
       timestamp: new Date().toISOString()
@@ -78,11 +75,9 @@ router.get('/health', async (req, res) => {
           status: tiktokService.isConnected() ? 'connected' : 'disconnected',
           healthy: tiktokService.isHealthy()
         },
-        gmod: {
-          status: gmodService.isConnected() ? 'connected' : 'disconnected',
-          // status: 'connected',
-          healthy: gmodService.isHealthy()
-          // healthy: true
+        activeService: {
+          status: 'see_processor_status',
+          healthy: true
         },
         queue: await queueManager.getHealthStatus(),
         database: {
@@ -177,8 +172,15 @@ router.post('/restart/:service', async (req, res) => {
         res.json({ success: true, message: 'TikTok service restarted' });
         break;
       case 'gmod':
-        await gmodService.restart();
-        res.json({ success: true, message: 'GMod service restarted' });
+      case 'gtav':
+      case 'dinochrome':
+        const activeService = queueProcessor.getActiveService();
+        if (activeService && activeService.restart) {
+          await activeService.restart();
+          res.json({ success: true, message: `${service} service restarted` });
+        } else {
+          res.json({ success: true, message: `${service} service does not support restart` });
+        }
         break;
       default:
         res.status(400).json({ error: 'Invalid service name' });

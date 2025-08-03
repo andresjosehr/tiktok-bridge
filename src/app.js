@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const config = require('./config/config');
 const orm = require('./database/orm');
 const tiktokService = require('./services/tiktok/tiktokService');
-const gmodService = require('./services/gmod/gmodServiceInstance');
+// GMod service se carga solo si está habilitado
 const queueProcessor = require('./queue/queueProcessor');
 const eventManager = require('./services/eventManager');
 const logger = require('./utils/logger');
@@ -24,13 +24,21 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-app.get('/status', (req, res) => {
-  res.json({
-    tiktokConnected: tiktokService.isConnected(),
-    gmodConnected: gmodService.isConnected(),
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
+app.get('/status', async (req, res) => {
+  try {
+    const queueStatus = await queueProcessor.getProcessorStatus();
+    res.json({
+      tiktokConnected: tiktokService.isConnected(),
+      activeService: queueStatus.activeServiceType,
+      serviceConnected: queueStatus.activeService ? queueStatus.activeService.isConnected : false,
+      enabledServices: queueStatus.enabledServices,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get status:', error);
+    res.status(500).json({ error: 'Failed to get status' });
+  }
 });
 
 const startServer = async () => {
@@ -49,10 +57,11 @@ const startServer = async () => {
     logger.info('Initializing TikTok service...');
     await tiktokService.initialize();
     
-    logger.info('Initializing GMod service...');
-    await gmodService.initialize();
+    // Solo inicializar servicios que están habilitados
+    const enabledServices = config.queue.enabledProcessors || ['gmod'];
+    logger.info(`Enabled services: ${enabledServices.join(', ')}`);
     
-    // Always start the queue processor after all services are initialized
+    // Los servicios específicos se inicializan ahora en queueProcessor
     logger.info('Starting queue processor...');
     await queueProcessor.start();
     
@@ -64,7 +73,6 @@ const startServer = async () => {
       logger.info('SIGTERM received, shutting down gracefully');
       server.close(async () => {
         await tiktokService.disconnect();
-        await gmodService.disconnect();
         await queueProcessor.gracefulShutdown();
         await orm.close();
         process.exit(0);
