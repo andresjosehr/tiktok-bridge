@@ -27,7 +27,7 @@ class DinoChrome extends ServiceBase {
     this.currentScore = 0; // Puntuación actual
     
     // Configurar DinoChrome para procesar solo eventos finales de rachas de gifts
-    this.setProcessOnlyFinalGifts(false);
+    this.setProcessOnlyFinalGifts(true);
     
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }

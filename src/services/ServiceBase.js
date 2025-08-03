@@ -71,18 +71,21 @@ class ServiceBase {
 
   // Método para verificar si el servicio debe procesar un evento de gift
   shouldProcessGift(eventData, queueData) {
-    // Si el servicio no está configurado para procesar solo finales, procesar todos
-    if (!this.processOnlyFinalGifts) {
-      return true;
-    }
-
-    // Si está configurado para solo finales, verificar repeat_end
     const repeatEnd = queueData?.repeat_end;
     
-    // Si repeat_end es null (evento no-streakable), procesar
-    // Si repeat_end es true (final de racha), procesar
-    // Si repeat_end es false (parte de racha en progreso), NO procesar
-    return repeatEnd !== false;
+    if (this.processOnlyFinalGifts) {
+      // Si está configurado para solo finales, verificar repeat_end
+      // Si repeat_end es null (evento no-streakable), procesar
+      // Si repeat_end es true (final de racha), procesar
+      // Si repeat_end es false (parte de racha en progreso), NO procesar
+      return repeatEnd !== false;
+    } else {
+      // Si NO está configurado para solo finales, procesar solo intermedios
+      // Si repeat_end es null (evento no-streakable), procesar
+      // Si repeat_end es false (parte de racha en progreso), procesar
+      // Si repeat_end es true (final de racha), NO procesar
+      return repeatEnd !== true;
+    }
   }
 }
 
