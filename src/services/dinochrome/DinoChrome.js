@@ -20,7 +20,9 @@ class DinoChrome extends ServiceBase {
     this.currentSpeed = 6;
     this.isPlayingAudio = false;
     this.audioQueue = [];
-    this.activeAudioProcesses = new Set(); // Rastrear procesos de audio activos
+    this.activeAudioProcesses = new Map(); // Rastrear procesos con más detalles
+    this.currentAudioProcess = null; // Solo UN proceso activo a la vez
+    this.audioCleanupInterval = null; // Limpieza periódica
     this.highScore = 0; // Récord máximo de la sesión
     this.currentScore = 0; // Puntuación actual
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
@@ -172,6 +174,11 @@ class DinoChrome extends ServiceBase {
       // Iniciar el auto-jumping
       await this.startAutoJumping();
       
+      // Iniciar limpieza periódica de audio cada 30 segundos
+      this.audioCleanupInterval = setInterval(() => {
+        this.performPeriodicAudioCleanup();
+      }, 30000);
+      
       this.setConnected(true);
       logger.info(`${this.emoji} DinoChrome connected - Chrome Dino automation activated!`);
       return true;
@@ -196,37 +203,17 @@ class DinoChrome extends ServiceBase {
         this.gameMonitorInterval = null;
       }
       
+      if (this.audioCleanupInterval) {
+        clearInterval(this.audioCleanupInterval);
+        this.audioCleanupInterval = null;
+      }
+      
       // Limpiar cola de audio y estado de reproducción
       this.isPlayingAudio = false;
       this.audioQueue = [];
       
-      // Forzar limpieza de procesos de audio pendientes
-      try {
-        // Primero terminar procesos rastreados
-        for (const pid of this.activeAudioProcesses) {
-          try {
-            process.kill(pid, 'SIGTERM');
-            logger.debug(`${this.emoji} Killed tracked audio process: ${pid}`);
-          } catch (e) {
-            // Proceso ya terminado
-          }
-        }
-        this.activeAudioProcesses.clear();
-        
-        // Backup cleanup con pkill
-        const { exec } = require('child_process');
-        const platform = os.platform();
-        
-        if (platform === 'linux') {
-          // Matar procesos de ffplay que puedan haber quedado
-          exec('pkill -f ffplay 2>/dev/null', () => {});
-        } else if (platform === 'darwin') {
-          // Matar procesos de afplay en macOS
-          exec('pkill afplay 2>/dev/null', () => {});
-        }
-      } catch (cleanupError) {
-        logger.debug(`${this.emoji} Audio cleanup completed: ${cleanupError.message}`);
-      }
+      // Forzar limpieza COMPLETA de procesos de audio
+      await this.forceAudioCleanup();
       
       // Cerrar browser
       if (this.browser) {
@@ -248,19 +235,19 @@ class DinoChrome extends ServiceBase {
   async handleTikTokChat(data) {
     this.updateLastActivity();
     
-    console.log('\n' + '='.repeat(60));
-    console.log(`${this.emoji} DinoChrome - CHAT EVENT`);
-    console.log('='.repeat(60));
-    console.log(`👤 Usuario: ${data.uniqueId || 'Anónimo'}`);
-    console.log(`💬 Mensaje: ${data.comment || 'Sin mensaje'}`);
-    console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
-    console.log(`📊 Likes del mensaje: ${data.likeCount || 0}`);
-    if (data.profilePictureUrl) {
-      console.log(`🖼️  Avatar: ${data.profilePictureUrl}`);
-    }
-    console.log('='.repeat(60) + '\n');
+    // console.log('\n' + '='.repeat(60));
+    // console.log(`${this.emoji} DinoChrome - CHAT EVENT`);
+    // console.log('='.repeat(60));
+    // console.log(`👤 Usuario: ${data.uniqueId || 'Anónimo'}`);
+    // console.log(`💬 Mensaje: ${data.comment || 'Sin mensaje'}`);
+    // console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
+    // console.log(`📊 Likes del mensaje: ${data.likeCount || 0}`);
+    // if (data.profilePictureUrl) {
+    //   console.log(`🖼️  Avatar: ${data.profilePictureUrl}`);
+    // }
+    // console.log('='.repeat(60) + '\n');
     
-    logger.info(`${this.emoji} DinoChrome processed chat from ${data.uniqueId}: "${data.comment}"`);
+    // logger.info(`${this.emoji} DinoChrome processed chat from ${data.uniqueId}: "${data.comment}"`);
   }
 
   async handleTikTokGift(data) {
@@ -315,63 +302,63 @@ class DinoChrome extends ServiceBase {
   async handleTikTokFollow(data) {
     this.updateLastActivity();
     
-    console.log('\n' + '👥'.repeat(18));
-    console.log(`${this.emoji} DinoChrome - NEW FOLLOWER EVENT`);
-    console.log('👥'.repeat(18));
-    console.log(`🆕 Nuevo seguidor: ${data.uniqueId || 'Usuario anónimo'}`);
-    console.log(`📈 Total seguidores: ${data.followersCount || 'Desconocido'}`);
-    console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
-    console.log(`🎊 ¡Bienvenido a la familia!`);
-    console.log('👥'.repeat(18) + '\n');
+    // console.log('\n' + '👥'.repeat(18));
+    // console.log(`${this.emoji} DinoChrome - NEW FOLLOWER EVENT`);
+    // console.log('👥'.repeat(18));
+    // console.log(`🆕 Nuevo seguidor: ${data.uniqueId || 'Usuario anónimo'}`);
+    // console.log(`📈 Total seguidores: ${data.followersCount || 'Desconocido'}`);
+    // console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
+    // console.log(`🎊 ¡Bienvenido a la familia!`);
+    // console.log('👥'.repeat(18) + '\n');
     
-    logger.info(`${this.emoji} DinoChrome processed new follower: ${data.uniqueId}`);
+    // logger.info(`${this.emoji} DinoChrome processed new follower: ${data.uniqueId}`);
   }
 
   async handleTikTokLike(data) {
     this.updateLastActivity();
     
-    console.log('\n' + '👍'.repeat(15));
-    console.log(`${this.emoji} DinoChrome - LIKE EVENT`);
-    console.log('👍'.repeat(15));
-    console.log(`❤️  Usuario: ${data.uniqueId || 'Anónimo'}`);
-    console.log(`📊 Likes totales: ${data.totalLikes || 'Desconocido'}`);
-    console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
-    console.log('👍'.repeat(15) + '\n');
+    // console.log('\n' + '👍'.repeat(15));
+    // console.log(`${this.emoji} DinoChrome - LIKE EVENT`);
+    // console.log('👍'.repeat(15));
+    // console.log(`❤️  Usuario: ${data.uniqueId || 'Anónimo'}`);
+    // console.log(`📊 Likes totales: ${data.totalLikes || 'Desconocido'}`);
+    // console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
+    // console.log('👍'.repeat(15) + '\n');
     
-    logger.debug(`${this.emoji} DinoChrome processed like from ${data.uniqueId}`);
+    // logger.debug(`${this.emoji} DinoChrome processed like from ${data.uniqueId}`);
   }
 
   async handleTikTokShare(data) {
     this.updateLastActivity();
     
-    console.log('\n' + '📤'.repeat(15));
-    console.log(`${this.emoji} DinoChrome - SHARE EVENT`);
-    console.log('📤'.repeat(15));
-    console.log(`🔄 Usuario: ${data.uniqueId || 'Anónimo'}`);
-    console.log(`📢 ¡Compartió el stream!`);
-    console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
-    console.log(`🚀 ¡Ayudando a crecer el canal!`);
-    console.log('📤'.repeat(15) + '\n');
+    // console.log('\n' + '📤'.repeat(15));
+    // console.log(`${this.emoji} DinoChrome - SHARE EVENT`);
+    // console.log('📤'.repeat(15));
+    // console.log(`🔄 Usuario: ${data.uniqueId || 'Anónimo'}`);
+    // console.log(`📢 ¡Compartió el stream!`);
+    // console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
+    // console.log(`🚀 ¡Ayudando a crecer el canal!`);
+    // console.log('📤'.repeat(15) + '\n');
     
-    logger.info(`${this.emoji} DinoChrome processed share from ${data.uniqueId}`);
+    // logger.info(`${this.emoji} DinoChrome processed share from ${data.uniqueId}`);
   }
 
   async handleViewerCount(data) {
-    this.updateLastActivity();
+    // this.updateLastActivity();
     
-    // Solo mostrar cada 10 cambios para no saturar la consola
-    if (!this.lastViewerCount || Math.abs(data.viewerCount - this.lastViewerCount) >= 10) {
-      console.log('\n' + '👀'.repeat(12));
-      console.log(`${this.emoji} DinoChrome - VIEWER COUNT UPDATE`);
-      console.log('👀'.repeat(12));
-      console.log(`👥 Espectadores actuales: ${data.viewerCount || 0}`);
-      console.log(`📈 Cambio: ${this.lastViewerCount ? (data.viewerCount - this.lastViewerCount > 0 ? '+' : '') + (data.viewerCount - this.lastViewerCount) : 'Primer registro'}`);
-      console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
-      console.log('👀'.repeat(12) + '\n');
+    // // Solo mostrar cada 10 cambios para no saturar la consola
+    // if (!this.lastViewerCount || Math.abs(data.viewerCount - this.lastViewerCount) >= 10) {
+    //   console.log('\n' + '👀'.repeat(12));
+    //   console.log(`${this.emoji} DinoChrome - VIEWER COUNT UPDATE`);
+    //   console.log('👀'.repeat(12));
+    //   console.log(`👥 Espectadores actuales: ${data.viewerCount || 0}`);
+    //   console.log(`📈 Cambio: ${this.lastViewerCount ? (data.viewerCount - this.lastViewerCount > 0 ? '+' : '') + (data.viewerCount - this.lastViewerCount) : 'Primer registro'}`);
+    //   console.log(`🕐 Timestamp: ${new Date().toLocaleString()}`);
+    //   console.log('👀'.repeat(12) + '\n');
       
-      this.lastViewerCount = data.viewerCount;
-      logger.debug(`${this.emoji} DinoChrome updated viewer count: ${data.viewerCount}`);
-    }
+    //   this.lastViewerCount = data.viewerCount;
+    //   logger.debug(`${this.emoji} DinoChrome updated viewer count: ${data.viewerCount}`);
+    // }
   }
 
   // Método extra para obtener estadísticas del servicio
@@ -535,7 +522,7 @@ class DinoChrome extends ServiceBase {
     }
   }
 
-  // Método para reproducir audio de regalo (rose o rosa)
+  // Método SIMPLIFICADO para reproducir audio de regalo 
   playGiftAudio(giftType, data) {
     const audioPath = this.getRandomGiftAudio(giftType);
     if (!audioPath) {
@@ -543,27 +530,13 @@ class DinoChrome extends ServiceBase {
       return;
     }
 
-    // Si ya hay un audio reproduciéndose, agregarlo a la cola
-    if (this.isPlayingAudio) {
-      this.audioQueue.push({
-        path: audioPath,
-        giftData: data,
-        giftType: giftType
-      });
-      logger.info(`${this.emoji} ${giftType} audio queued: ${path.basename(audioPath)} (Queue size: ${this.audioQueue.length})`);
-    } else {
-      // Reproducir inmediatamente sin bloquear el procesamiento de eventos
-      logger.info(`${this.emoji} Playing ${giftType} audio: ${path.basename(audioPath)}`);
-      // Ejecutar de forma asíncrona sin await para no bloquear
-      this.playAudio(audioPath).then(() => {
-        // Procesar la cola después de terminar
-        this.processAudioQueue();
-      }).catch(error => {
-        logger.error(`${this.emoji} Error playing audio: ${error.message}`);
-        this.isPlayingAudio = false;
-        this.processAudioQueue();
-      });
-    }
+    // REPRODUCIR INMEDIATAMENTE - Sin cola, sin complicaciones
+    logger.info(`${this.emoji} Playing ${giftType} audio: ${path.basename(audioPath)}`);
+    
+    // Ejecutar de forma asíncrona - el nuevo playAudio() ya maneja todo agresivamente
+    this.playAudio(audioPath).catch(error => {
+      logger.error(`${this.emoji} Error playing audio: ${error.message}`);
+    });
   }
 
   // Método para obtener un audio aleatorio de regalos (rose o rosa)
@@ -614,127 +587,164 @@ class DinoChrome extends ServiceBase {
     });
   }
 
-  // Método para reproducir audio con gestión de estado mejorada
+  // Método para limpieza periódica de procesos de audio
+  async performPeriodicAudioCleanup() {
+    try {
+      const now = Date.now();
+      let killedProcesses = 0;
+      
+      // Verificar procesos registrados que lleven más de 10 segundos
+      for (const [pid, info] of this.activeAudioProcesses.entries()) {
+        const age = now - info.startTime;
+        if (age > 10000) { // 10 segundos
+          try {
+            process.kill(pid, 'SIGKILL');
+            killedProcesses++;
+            logger.warn(`${this.emoji} Killed old audio process: ${info.filePath} (${Math.round(age/1000)}s old)`);
+          } catch (e) {
+            // Proceso ya no existe
+          }
+          this.activeAudioProcesses.delete(pid);
+        }
+      }
+      
+      // Si hay procesos viejos o si detectamos problemas, hacer limpieza completa
+      if (killedProcesses > 0 || this.activeAudioProcesses.size > 3) {
+        await this.forceAudioCleanup();
+        logger.info(`${this.emoji} Performed full audio cleanup (killed ${killedProcesses} old processes)`);
+      }
+      
+    } catch (error) {
+      logger.debug(`${this.emoji} Periodic cleanup error: ${error.message}`);
+    }
+  }
+
+  // Método para limpiar TODOS los procesos de audio del sistema
+  async forceAudioCleanup() {
+    try {
+      const platform = os.platform();
+      const { exec } = require('child_process');
+      
+      if (platform === 'linux') {
+        // Matar TODOS los procesos de audio que puedan estar corriendo
+        await new Promise(resolve => {
+          exec('pkill -9 -f "ffplay|mpg123|paplay|aplay"', () => resolve());
+        });
+        // También limpiar cualquier proceso zombie
+        await new Promise(resolve => {
+          exec('ps aux | grep -E "ffplay|mpg123" | grep -v grep | awk \'{print $2}\' | xargs -r kill -9', () => resolve());
+        });
+      } else if (platform === 'darwin') {
+        await new Promise(resolve => {
+          exec('pkill -9 afplay', () => resolve());
+        });
+      }
+      
+      // Limpiar registros internos
+      this.activeAudioProcesses.clear();
+      this.currentAudioProcess = null;
+      this.isPlayingAudio = false;
+      
+      logger.debug(`${this.emoji} FORCE AUDIO CLEANUP - All audio processes terminated`);
+    } catch (error) {
+      logger.debug(`${this.emoji} Force cleanup completed: ${error.message}`);
+    }
+  }
+
+  // Método ULTRA SIMPLE para reproducir audio - UN SOLO PROCESO
   async playAudio(filePath) {
     return new Promise(async (resolve) => {
-      let audioProcess = null;
-      let timeoutId = null;
-      
-      const cleanup = () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-        if (audioProcess && !audioProcess.killed) {
-          try {
-            audioProcess.kill('SIGTERM');
-            this.activeAudioProcesses.delete(audioProcess.pid);
-          } catch (e) {
-            // Proceso ya terminado
-          }
-        }
-        this.isPlayingAudio = false;
-      };
-
       try {
+        // STEP 1: MATAR cualquier audio anterior inmediatamente
+        if (this.currentAudioProcess && !this.currentAudioProcess.killed) {
+          try {
+            this.currentAudioProcess.kill('SIGKILL'); // Forzar SIGKILL inmediato
+          } catch (e) {}
+        }
+        
+        // STEP 2: Limpieza agresiva del sistema
+        await this.forceAudioCleanup();
+        
+        // STEP 3: Marcar como ocupado
         this.isPlayingAudio = true;
+        
         const platform = os.platform();
-        let command;
-        let args = [];
+        let command, args = [];
         
         if (platform === 'linux') {
-          // Usar solo ffplay con argumentos separados para mejor control
           command = 'ffplay';
-          args = ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath];
+          args = ['-nodisp', '-autoexit', '-loglevel', 'panic', '-volume', '100', filePath];
         } else if (platform === 'darwin') {
-          // macOS
           command = 'afplay';
           args = [filePath];
         } else if (platform === 'win32') {
-          // Windows - usar powershell con timeout
           command = 'powershell';
           args = ['-c', `$player = New-Object Media.SoundPlayer '${filePath}'; $player.PlaySync()`];
         } else {
-          logger.warn(`${this.emoji} Unsupported platform for audio playback: ${platform}`);
-          cleanup();
+          this.isPlayingAudio = false;
           resolve();
           return;
         }
         
-        // Obtener duración del audio
         const duration = await this.getAudioDuration(filePath);
-        
-        // Usar spawn para mejor control del proceso
         const { spawn } = require('child_process');
-        audioProcess = spawn(command, args, {
-          stdio: ['ignore', 'ignore', 'pipe']
+        
+        // STEP 4: Crear NUEVO proceso
+        this.currentAudioProcess = spawn(command, args, {
+          stdio: ['ignore', 'ignore', 'ignore'], // Suprimir TODA salida
+          detached: false // Mantener control directo
         });
         
-        // Registrar el proceso activo
-        this.activeAudioProcesses.add(audioProcess.pid);
-        
-        let hasResolved = false;
-        
-        audioProcess.on('close', (code) => {
-          if (!hasResolved) {
-            hasResolved = true;
-            if (code === 0) {
-              logger.info(`${this.emoji} Audio playback completed: ${path.basename(filePath)}`);
-            } else {
-              logger.warn(`${this.emoji} Audio process exited with code ${code}: ${path.basename(filePath)}`);
-            }
-            cleanup();
-            resolve();
-          }
+        const pid = this.currentAudioProcess.pid;
+        this.activeAudioProcesses.set(pid, {
+          startTime: Date.now(),
+          filePath: path.basename(filePath),
+          process: this.currentAudioProcess
         });
         
-        audioProcess.on('error', (error) => {
-          if (!hasResolved) {
-            hasResolved = true;
-            logger.warn(`${this.emoji} Failed to play audio: ${error.message}`);
-            cleanup();
+        let resolved = false;
+        const finish = () => {
+          if (!resolved) {
+            resolved = true;
+            this.isPlayingAudio = false;
+            this.currentAudioProcess = null;
             resolve();
           }
-        });
+        };
         
-        // Timeout de seguridad basado en duración estimada + margen
-        const safetyTimeout = duration + 2000; // 2 segundos extra de margen
-        timeoutId = setTimeout(() => {
-          if (!hasResolved) {
-            hasResolved = true;
-            logger.warn(`${this.emoji} Audio playback timeout after ${safetyTimeout}ms: ${path.basename(filePath)}`);
-            cleanup();
-            resolve();
+        // Eventos del proceso
+        this.currentAudioProcess.on('close', finish);
+        this.currentAudioProcess.on('error', finish);
+        this.currentAudioProcess.on('exit', finish);
+        
+        // Timeout AGRESIVO - matar si se pasa
+        const maxTimeout = Math.min(duration + 1000, 5000); // Máximo 5 segundos
+        setTimeout(() => {
+          if (!resolved && this.currentAudioProcess && !this.currentAudioProcess.killed) {
+            this.currentAudioProcess.kill('SIGKILL');
+            logger.warn(`${this.emoji} KILLED audio after ${maxTimeout}ms: ${path.basename(filePath)}`);
+            finish();
           }
-        }, safetyTimeout);
+        }, maxTimeout);
         
-        logger.info(`${this.emoji} Audio playback started: ${path.basename(filePath)} (estimated ${Math.round(duration)}ms)`);
+        logger.info(`${this.emoji} Audio started: ${path.basename(filePath)} (PID: ${pid}, max: ${maxTimeout}ms)`);
         
       } catch (error) {
-        logger.error(`${this.emoji} Error in audio playback: ${error.message}`);
-        cleanup();
+        logger.error(`${this.emoji} Audio error: ${error.message}`);
+        this.isPlayingAudio = false;
+        this.currentAudioProcess = null;
         resolve();
       }
     });
   }
 
-  // Método para procesar la cola de audios
+  // Método para procesar la cola de audios - SIMPLIFICADO
   async processAudioQueue() {
-    if (this.audioQueue.length > 0 && !this.isPlayingAudio) {
-      const nextAudio = this.audioQueue.shift();
-      const audioType = nextAudio.giftType || 'gift';
-      logger.info(`${this.emoji} Processing queued ${audioType} audio: ${path.basename(nextAudio.path)} (${this.audioQueue.length} remaining)`);
-      
-      try {
-        await this.playAudio(nextAudio.path);
-        // Recursivamente procesar el siguiente en la cola
-        this.processAudioQueue();
-      } catch (error) {
-        logger.error(`${this.emoji} Error processing queued audio: ${error.message}`);
-        this.isPlayingAudio = false;
-        // Continuar con el siguiente en la cola incluso si falló
-        this.processAudioQueue();
-      }
+    // En el nuevo sistema, no usamos cola - cada audio se reproduce inmediatamente
+    // Limpiar cualquier cola restante del sistema anterior
+    if (this.audioQueue.length > 0) {
+      logger.info(`${this.emoji} Clearing audio queue (${this.audioQueue.length} items) - using immediate playback now`);
+      this.audioQueue = [];
     }
   }
 

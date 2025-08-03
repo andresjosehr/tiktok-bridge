@@ -98,7 +98,7 @@ class QueueProcessor {
           continue;
         }
 
-        logger.info(`${this.name} processing job ${job.id}: ${job.event_type}`);
+        // logger.info(`${this.name} processing job ${job.id}: ${job.event_type}`);
         
         // Marcar que hay un trabajo en progreso
         this.currentJobInProgress = true;
@@ -138,7 +138,7 @@ class QueueProcessor {
     const startTime = Date.now();
     
     try {
-      logger.debug(`${this.name} processing job ${job.id}: ${job.event_type}`);
+      // logger.debug(`${this.name} processing job ${job.id}: ${job.event_type}`);
       
       const handler = this.eventHandlers.get(job.event_type);
       

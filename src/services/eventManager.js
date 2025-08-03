@@ -23,7 +23,6 @@ class EventManager extends EventEmitter {
 
   emit(eventName, data) {
     this.updateEventStats(eventName);
-    logger.debug(`Event emitted: ${eventName}`, data);
     
     try {
       super.emit(eventName, data);
@@ -57,8 +56,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokChat(data) {
-    logger.debug('TikTok chat event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:chat', data);
     } catch (error) {
@@ -76,8 +73,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokGift(data) {
-    logger.debug('TikTok gift event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:gift', data);
     } catch (error) {
@@ -91,8 +86,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokFollow(data) {
-    logger.debug('TikTok follow event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:follow', data);
     } catch (error) {
@@ -106,8 +99,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokLike(data) {
-    logger.debug('TikTok like event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:like', data);
     } catch (error) {
@@ -120,8 +111,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokShare(data) {
-    logger.debug('TikTok share event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:share', data);
     } catch (error) {
@@ -134,8 +123,6 @@ class EventManager extends EventEmitter {
   }
 
   async handleTikTokViewerCount(data) {
-    logger.debug('TikTok viewer count event received', data);
-    
     try {
       await queueManager.addEvent('tiktok:viewerCount', data);
     } catch (error) {

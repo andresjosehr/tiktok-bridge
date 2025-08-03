@@ -45,7 +45,7 @@ class QueueManager {
       return queueId;
     } catch (error) {
       if (error.isQueueFull) {
-        logger.info(`Queue full, skipping ${eventType} event (priority too low)`);
+        // logger.info(`Queue full, skipping ${eventType} event (priority too low)`);
       } else {
         logger.error(`Failed to add event to queue: ${eventType}`, error);
       }
