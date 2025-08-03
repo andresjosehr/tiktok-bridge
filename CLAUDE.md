@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a TikTok Live events bridge for Garry's Mod - a sophisticated Node.js application that connects TikTok Live streams to game servers with intelligent event queuing, priority management, and advanced TTS capabilities. The system captures TikTok Live events (chat, gifts, follows, etc.) and forwards them to game servers via WebSocket/HTTP with modular TTS, AI integration, and comprehensive caching.
+This is a TikTok Live events bridge - a sophisticated modular Node.js platform that connects TikTok Live streams to any game server or service with intelligent event queuing, priority management, and advanced TTS capabilities. The system captures TikTok Live events (chat, gifts, follows, etc.) and forwards them to game servers via WebSocket/HTTP with modular TTS, AI integration, and comprehensive caching.
 
 ## Key Architecture Components
 

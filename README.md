@@ -1,6 +1,6 @@
-# 🎮 Garrys TikTok - TikTok Live Bridge para Garry's Mod
+# 🎮 TikTok Live Bridge - Plataforma Modular de Eventos
 
-Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mod, diseñado con arquitectura modular y sistema de colas inteligente con prioridades.
+Una plataforma modular Node.js que conecta streams de TikTok Live con cualquier servidor de juego o servicio, diseñada con arquitectura modular y sistema de colas inteligente con prioridades.
 
 ## 🌟 Características Principales
 
@@ -39,9 +39,9 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 - **Limpieza automática** de eventos y archivos temporales
 
 ### 🎮 Servicios de Juegos Soportados
-- **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real
+- **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real (implementado)
 - **GTAV/FiveM**: Preparado para integración futura
-- **Arquitectura extensible** para agregar nuevos juegos
+- **Arquitectura extensible** para agregar cualquier juego o servicio
 - **Reconexión automática** cuando se pierde la conexión
 - **Formato de mensajes estandarizado** entre servicios
 
@@ -63,7 +63,7 @@ Un puente de eventos en tiempo real entre TikTok Live y servidores de Garry's Mo
 - **Node.js** 16+ 
 - **MySQL** 5.7+ o 8.0+
 - **NPM** o **Yarn**
-- **Garry's Mod Server** (para producción)
+- **Servidor de juego compatible** (GMod, FiveM, etc.) para producción
 
 ## 🚀 Instalación y Configuración
 
@@ -98,12 +98,15 @@ npm run migrate
 TIKTOK_USERNAME=nombre_usuario_tiktok
 ```
 
-### 5. Configurar Garry's Mod
+### 5. Configurar Servicio de Juego
 ```bash
-# En .env, configurar conexión con GMod
+# En .env, configurar conexión (ejemplo con GMod)
 GMOD_HOST=localhost
 GMOD_WS_PORT=27015
 GMOD_HTTP_PORT=27016
+
+# Habilitar servicios específicos
+QUEUE_ENABLED_PROCESSORS=gmod,gtav
 ```
 
 ## 🎯 Uso
@@ -216,11 +219,11 @@ garrys-tiktok/
 - `POST /api/simulate/gift` - Simular donación
 - `POST /api/simulate/follow` - Simular seguidor
 
-## 🎮 Integración con Garry's Mod
+## 🎮 Integración con Servicios de Juegos
 
 ### Formato de Mensajes WebSocket
 ```lua
--- Ejemplo de mensaje recibido en GMod
+-- Ejemplo de mensaje recibido en servicio de juego
 {
     "type": "tiktok_gift",
     "data": {
@@ -235,12 +238,12 @@ garrys-tiktok/
 }
 ```
 
-### Endpoints HTTP para GMod
+### Endpoints HTTP para Servicios
 ```lua
 -- POST /tiktok/chat
 -- POST /tiktok/gift  
 -- POST /tiktok/follow
--- POST /command (ejecutar comandos en GMod)
+-- POST /command (ejecutar comandos en servicio)
 ```
 
 ## ⚙️ Configuración Avanzada
@@ -273,7 +276,7 @@ TIKTOK_SESSION_ID=optional_session_id
 TIKTOK_MAX_RECONNECT_ATTEMPTS=5
 TIKTOK_RECONNECT_DELAY=5000
 
-# Garry's Mod
+# Servicios de Juegos (ejemplo: Garry's Mod)
 GMOD_HOST=localhost
 GMOD_RCON_PORT=27015
 GMOD_RCON_PASSWORD=password
@@ -445,7 +448,7 @@ npm run migrate:rollback
 npm run migrate
 ```
 
-### Problemas con Garry's Mod
+### Problemas con Servicios de Juegos
 - Verificar que el servidor esté ejecutándose
 - Comprobar puertos WebSocket/HTTP
 - Revisar firewall y conectividad de red
@@ -465,9 +468,9 @@ Este proyecto está bajo la Licencia MIT. Ver el archivo `LICENSE` para más det
 ## 🙏 Agradecimientos
 
 - [tiktok-live-connector](https://github.com/zerodytrash/TikTok-Live-Connector) por la integración con TikTok
-- Comunidad de Garry's Mod por el soporte y feedback
+- Comunidades de desarrolladores de juegos por el soporte y feedback
 - Contribuidores del proyecto
 
 ---
 
-**🎮 ¡Conecta tu stream de TikTok con Garry's Mod y crea experiencias interactivas únicas! 🎮**
+**🎮 ¡Conecta tu stream de TikTok con cualquier juego y crea experiencias interactivas únicas! 🎮**
