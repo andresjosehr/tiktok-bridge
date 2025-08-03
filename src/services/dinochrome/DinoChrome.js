@@ -20,6 +20,9 @@ class DinoChrome extends ServiceBase {
     this.currentSpeed = 6;
     this.isPlayingAudio = false;
     this.audioQueue = [];
+    this.activeAudioProcesses = new Set(); // Rastrear procesos de audio activos
+    this.highScore = 0; // Récord máximo de la sesión
+    this.currentScore = 0; // Puntuación actual
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }
 
@@ -38,12 +41,73 @@ class DinoChrome extends ServiceBase {
           '--disable-accelerated-2d-canvas',
           '--no-first-run',
           '--no-zygote',
-          '--disable-gpu'
+          '--disable-gpu',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+          '--disable-ipc-flooding-protection',
+          '--no-default-browser-check',
+          '--disable-hang-monitor',
+          '--disable-prompt-on-repost',
+          '--disable-sync',
+          '--metrics-recording-only',
+          '--safebrowsing-disable-auto-update',
+          '--disable-background-networking',
+          '--aggressive-cache-discard',
+          '--disable-extensions',
+          '--disable-plugins',
+          '--disable-default-apps',
+          '--disable-web-security',
+          '--allow-running-insecure-content',
+          '--disable-features=VizDisplayCompositor'
         ]
       });
 
       // Crear nueva página y simular estar desconectado para activar el juego del dinosaurio
       this.page = await this.browser.newPage();
+      
+      // Prevenir que la página se pause cuando pierde el foco
+      await this.page.evaluateOnNewDocument(() => {
+        // Interceptar y anular eventos de visibilidad
+        Object.defineProperty(document, 'hidden', {
+          get: function() { return false; },
+          configurable: true
+        });
+        
+        Object.defineProperty(document, 'visibilityState', {
+          get: function() { return 'visible'; },
+          configurable: true
+        });
+        
+        // Prevenir que se disparen eventos de cambio de visibilidad
+        document.addEventListener = new Proxy(document.addEventListener, {
+          apply: function(target, thisArg, argumentsList) {
+            if (argumentsList[0] === 'visibilitychange') {
+              return; // No agregar listeners de visibilitychange
+            }
+            return target.apply(thisArg, argumentsList);
+          }
+        });
+        
+        // Mantener el foco simulado
+        Object.defineProperty(document, 'hasFocus', {
+          get: function() { return true; },
+          configurable: true
+        });
+        
+        // Prevenir pause del juego por blur/focus
+        window.addEventListener = new Proxy(window.addEventListener, {
+          apply: function(target, thisArg, argumentsList) {
+            if (argumentsList[0] === 'blur' || argumentsList[0] === 'focus') {
+              return; // No agregar listeners de blur/focus
+            }
+            return target.apply(thisArg, argumentsList);
+          }
+        });
+        
+        console.log('🦖 Background execution protection enabled!');
+      });
       
       // Simular estar offline
       await this.page.setOfflineMode(true);
@@ -68,6 +132,42 @@ class DinoChrome extends ServiceBase {
       // Iniciar el juego presionando espacio
       await this.page.keyboard.press('Space');
       logger.info(`${this.emoji} Chrome Dino game started!`);
+      
+      // Aplicar hack de inmortalidad y prevención de pausa
+      await this.page.evaluate(() => {
+        // Guardar la función original y reemplazarla con una función vacía
+        if (typeof Runner !== 'undefined' && Runner.instance_) {
+          Runner.prototype.gameOver = function(){};
+          console.log('🦖 DINO IMMORTALITY ACTIVATED - Game Over disabled!');
+          
+          // Prevenir que el juego se pause por pérdida de foco
+          const originalStop = Runner.instance_.stop;
+          const originalPause = Runner.instance_.pause;
+          
+          Runner.instance_.stop = function() {
+            console.log('🦖 STOP BLOCKED - Game continues running!');
+            // No ejecutar stop
+          };
+          
+          Runner.instance_.pause = function() {
+            console.log('🦖 PAUSE BLOCKED - Game continues running!');
+            // No ejecutar pause
+          };
+          
+          // Forzar que el juego siempre esté en estado "playing"
+          Object.defineProperty(Runner.instance_, 'playing', {
+            get: function() { return true; },
+            set: function(value) { 
+              console.log(`🦖 Attempted to set playing to ${value}, keeping it true`);
+              // No cambiar el valor
+            },
+            configurable: true
+          });
+          
+          console.log('🦖 FOCUS LOSS PROTECTION ACTIVATED!');
+        }
+      });
+      logger.info(`${this.emoji} Immortality hack and focus protection applied - Dino is now invincible and won't pause!`);
       
       // Iniciar el auto-jumping
       await this.startAutoJumping();
@@ -100,6 +200,34 @@ class DinoChrome extends ServiceBase {
       this.isPlayingAudio = false;
       this.audioQueue = [];
       
+      // Forzar limpieza de procesos de audio pendientes
+      try {
+        // Primero terminar procesos rastreados
+        for (const pid of this.activeAudioProcesses) {
+          try {
+            process.kill(pid, 'SIGTERM');
+            logger.debug(`${this.emoji} Killed tracked audio process: ${pid}`);
+          } catch (e) {
+            // Proceso ya terminado
+          }
+        }
+        this.activeAudioProcesses.clear();
+        
+        // Backup cleanup con pkill
+        const { exec } = require('child_process');
+        const platform = os.platform();
+        
+        if (platform === 'linux') {
+          // Matar procesos de ffplay que puedan haber quedado
+          exec('pkill -f ffplay 2>/dev/null', () => {});
+        } else if (platform === 'darwin') {
+          // Matar procesos de afplay en macOS
+          exec('pkill afplay 2>/dev/null', () => {});
+        }
+      } catch (cleanupError) {
+        logger.debug(`${this.emoji} Audio cleanup completed: ${cleanupError.message}`);
+      }
+      
       // Cerrar browser
       if (this.browser) {
         await this.browser.close();
@@ -109,7 +237,7 @@ class DinoChrome extends ServiceBase {
       
       this.isGameRunning = false;
       this.setConnected(false);
-      logger.info(`${this.emoji} DinoChrome disconnected - Chrome browser closed`);
+      logger.info(`${this.emoji} DinoChrome disconnected - Chrome browser closed and audio processes cleaned`);
       return true;
     } catch (error) {
       logger.error(`${this.emoji} Error disconnecting DinoChrome: ${error.message}`);
@@ -154,36 +282,31 @@ class DinoChrome extends ServiceBase {
     console.log(`${randomCelebration} ¡GRACIAS POR EL REGALO! ${randomCelebration}`);
     console.log('🎁'.repeat(20) + '\n');
     
-    // Detectar si el regalo es una rosa y reproducir audio aleatorio
-    if (data.giftName && data.giftName.toLowerCase().includes('rose')) {
-      console.log(`🌹 ¡ROSA DETECTADA! Reproduciendo audio especial... 🌹`);
+    // Detectar si el regalo es un Rose o Rosa
+    const giftCost = data.cost || 0;
+    const giftName = data.giftName ? data.giftName.toLowerCase() : '';
+    
+    // GG para pruebas (checkeamos primero para que tenga prioridad)
+    const isRosa = (giftName === 'gg' || giftName.includes('gg'));
+    // Rose de 1 moneda (solo si NO es rosa y el costo es 1)
+    const isRose = (!isRosa && giftName === 'rose' && giftCost === 1);
+    
+    if (isRosa) {
+      console.log(`🎮 ¡GG DETECTADO! Reiniciando juego y reproduciendo audio especial... 🎮`);
+      logger.info(`${this.emoji} GG detected! Cost: ${giftCost} coins, restarting game...`);
       
-      // Si ya hay un audio reproduciéndose, agregarlo a la cola
-      if (this.isPlayingAudio) {
-        const audioPath = this.getRandomRoseAudio();
-        if (audioPath) {
-          this.audioQueue.push({
-            path: audioPath,
-            giftData: data
-          });
-          logger.info(`${this.emoji} Rose audio queued: ${path.basename(audioPath)} (Queue size: ${this.audioQueue.length})`);
-        }
-      } else {
-        // Reproducir inmediatamente sin bloquear el procesamiento de eventos
-        const audioPath = this.getRandomRoseAudio();
-        if (audioPath) {
-          logger.info(`${this.emoji} Playing rose audio: ${path.basename(audioPath)}`);
-          // Ejecutar de forma asíncrona sin await para no bloquear
-          this.playAudio(audioPath).then(() => {
-            // Procesar la cola después de terminar
-            this.processAudioQueue();
-          }).catch(error => {
-            logger.error(`${this.emoji} Error playing audio: ${error.message}`);
-            this.isPlayingAudio = false;
-            this.processAudioQueue();
-          });
-        }
-      }
+      // Reiniciar el juego primero
+      await this.restartGame();
+      
+      // Reproducir audio aleatorio de la carpeta rosa/
+      this.playGiftAudio('rosa', data);
+      
+    } else if (isRose) {
+      console.log(`🌹 ¡ROSE DE 1 MONEDA DETECTADA! Reproduciendo audio especial... 🌹`);
+      logger.info(`${this.emoji} Rose gift detected! Cost: ${giftCost} coins, playing audio...`);
+      
+      // Reproducir audio aleatorio de la carpeta rose/
+      this.playGiftAudio('rose', data);
     }
     
     logger.info(`${this.emoji} DinoChrome processed gift from ${data.uniqueId}: ${data.giftName} x${data.repeatCount}`);
@@ -263,37 +386,209 @@ class DinoChrome extends ServiceBase {
       audioStatus: this.isPlayingAudio ? 'Playing audio' : 'Audio idle',
       audioQueueSize: this.audioQueue.length,
       eventsProcessed: this.lastActivity ? 'Active' : 'Waiting for events',
+      currentScore: this.currentScore,
+      sessionHighScore: this.highScore,
       capabilities: [
         'Chrome Dino automation',
         'Infinite auto-jumping',
         'Obstacle detection',
-        'Auto-restart on game over',
+        'Immortality hack (never game over)',
         'TikTok event logging',
         'Real-time game monitoring',
-        'Rose gift audio playback',
+        'Rose gift audio playback (1 coin)',
+        'Rosa gift audio playback + game restart (10+ coins)',
         'Sequential audio queue management'
       ]
     };
   }
 
-  // Método para obtener un audio aleatorio de rosas
-  getRandomRoseAudio() {
+  // Método para reiniciar el juego del dinosaurio navegando a chrome://dino/
+  async restartGame() {
     try {
-      const audiosDir = path.join(__dirname, 'audios', 'rose');
+      if (!this.page) {
+        logger.warn(`${this.emoji} Cannot restart game - no page available`);
+        return false;
+      }
+      
+      logger.info(`${this.emoji} Restarting Chrome Dino game by navigating to chrome://dino/...`);
+      
+      // Guardar el récord actual antes de reiniciar
+      const currentGameScore = await this.page.evaluate(() => {
+        if (typeof Runner !== 'undefined' && Runner.instance_) {
+          const game = Runner.instance_;
+          return Math.floor(game.distanceRan / 10) || 0;
+        }
+        return 0;
+      });
+      
+      // Actualizar el récord si es necesario
+      if (currentGameScore > this.highScore) {
+        this.highScore = currentGameScore;
+        logger.info(`${this.emoji} New high score! ${this.highScore}`);
+      }
+      
+      this.currentScore = currentGameScore;
+      console.log(`🏆 Récord actual de la sesión: ${this.highScore} puntos`);
+      
+      // Detener el auto-jumping temporalmente
+      const wasRunning = this.isGameRunning;
+      this.isGameRunning = false;
+      
+      if (this.jumpInterval) {
+        clearTimeout(this.jumpInterval);
+        clearInterval(this.jumpInterval);
+        this.jumpInterval = null;
+      }
+      
+      // Primero salir del modo offline temporalmente
+      await this.page.setOfflineMode(false);
+      
+      try {
+        // Navegar a chrome://dino/ para empezar completamente desde cero
+        await this.page.goto('chrome://dino/');
+        logger.info(`${this.emoji} Successfully navigated to chrome://dino/`);
+      } catch (error) {
+        logger.warn(`${this.emoji} Could not navigate to chrome://dino/, using offline fallback: ${error.message}`);
+        // Fallback: volver al modo offline y usar el método tradicional
+        await this.page.setOfflineMode(true);
+        await this.page.goto('http://google.com').catch(() => {});
+      }
+      
+      // Esperar un momento para que la página cargue
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Verificar que el juego esté disponible y reiniciarlo
+      const gameRestarted = await this.page.evaluate(() => {
+        if (typeof Runner !== 'undefined') {
+          // Si hay una instancia, reiniciarla
+          if (Runner.instance_) {
+            Runner.instance_.restart();
+            console.log('🦖 GAME RESTARTED using Runner.restart()');
+          } else {
+            // Si no hay instancia, inicializar el juego
+            console.log('🦖 No Runner instance found, starting new game');
+          }
+          return true;
+        }
+        return false;
+      });
+      
+      if (!gameRestarted) {
+        logger.warn(`${this.emoji} Game not available, ensuring offline mode and reloading`);
+        // Asegurar modo offline y recargar
+        await this.page.setOfflineMode(true);
+        await this.page.goto('http://google.com').catch(() => {});
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Intentar iniciar el juego
+        await this.page.keyboard.press('Space');
+      } else {
+        // Si el juego se reinició correctamente, simplemente presionar espacio para asegurar que esté corriendo
+        await this.page.keyboard.press('Space');
+      }
+      
+      logger.info(`${this.emoji} Game restarted and started!`);
+      
+      // Aplicar hack de inmortalidad y restaurar récord
+      const highScore = this.highScore;
+      await this.page.evaluate((preservedHighScore) => {
+        if (typeof Runner !== 'undefined' && Runner.instance_) {
+          // Aplicar hack de inmortalidad
+          Runner.prototype.gameOver = function(){};
+          console.log('🦖 IMMORTALITY ACTIVATED after restart!');
+          
+          // Restaurar el récord máximo (intento seguro con fallback)
+          if (preservedHighScore > 0) {
+            try {
+              // Intentar usar localStorage si está disponible
+              if (typeof localStorage !== 'undefined' && localStorage) {
+                localStorage.setItem('highScore', preservedHighScore.toString());
+                console.log(`🏆 Récord guardado en localStorage: ${preservedHighScore} puntos`);
+              }
+            } catch (localStorageError) {
+              console.log(`🏆 localStorage no disponible, preservando récord internamente: ${preservedHighScore} puntos`);
+              // Fallback: guardar el high score directamente en una variable global
+              if (typeof window !== 'undefined') {
+                window.dinoHighScore = preservedHighScore;
+              }
+            }
+            
+            // También actualizar la variable del juego si existe
+            if (Runner.instance_.distanceRan !== undefined) {
+              // Mostrar el récord preservado en la consola del navegador
+              console.log(`🏆 Récord preservado: ${preservedHighScore} puntos`);
+            }
+          }
+        }
+      }, highScore);
+      
+      // Reiniciar el auto-jumping si estaba corriendo
+      if (wasRunning) {
+        await this.startAutoJumping();
+      }
+      
+      logger.info(`${this.emoji} Game restarted successfully from chrome://dino/!`);
+      return true;
+    } catch (error) {
+      logger.error(`${this.emoji} Error restarting game: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Método para reproducir audio de regalo (rose o rosa)
+  playGiftAudio(giftType, data) {
+    const audioPath = this.getRandomGiftAudio(giftType);
+    if (!audioPath) {
+      logger.warn(`${this.emoji} No ${giftType} audio file found`);
+      return;
+    }
+
+    // Si ya hay un audio reproduciéndose, agregarlo a la cola
+    if (this.isPlayingAudio) {
+      this.audioQueue.push({
+        path: audioPath,
+        giftData: data,
+        giftType: giftType
+      });
+      logger.info(`${this.emoji} ${giftType} audio queued: ${path.basename(audioPath)} (Queue size: ${this.audioQueue.length})`);
+    } else {
+      // Reproducir inmediatamente sin bloquear el procesamiento de eventos
+      logger.info(`${this.emoji} Playing ${giftType} audio: ${path.basename(audioPath)}`);
+      // Ejecutar de forma asíncrona sin await para no bloquear
+      this.playAudio(audioPath).then(() => {
+        // Procesar la cola después de terminar
+        this.processAudioQueue();
+      }).catch(error => {
+        logger.error(`${this.emoji} Error playing audio: ${error.message}`);
+        this.isPlayingAudio = false;
+        this.processAudioQueue();
+      });
+    }
+  }
+
+  // Método para obtener un audio aleatorio de regalos (rose o rosa)
+  getRandomGiftAudio(giftType) {
+    try {
+      const audiosDir = path.join(__dirname, 'audios', giftType);
       const files = fs.readdirSync(audiosDir)
         .filter(file => file.endsWith('.mp3'));
       
       if (files.length === 0) {
-        logger.warn(`${this.emoji} No rose audio files found in ${audiosDir}`);
+        logger.warn(`${this.emoji} No ${giftType} audio files found in ${audiosDir}`);
         return null;
       }
       
       const randomFile = files[Math.floor(Math.random() * files.length)];
       return path.join(audiosDir, randomFile);
     } catch (error) {
-      logger.error(`${this.emoji} Error getting random rose audio: ${error.message}`);
+      logger.error(`${this.emoji} Error getting random ${giftType} audio: ${error.message}`);
       return null;
     }
+  }
+
+  // Método para obtener un audio aleatorio de rosas (compatibilidad hacia atrás)
+  getRandomRoseAudio() {
+    return this.getRandomGiftAudio('rosa');
   }
 
   // Método para obtener la duración del audio (estimada por tamaño de archivo)
@@ -319,27 +614,49 @@ class DinoChrome extends ServiceBase {
     });
   }
 
-  // Método para reproducir audio con gestión de estado
+  // Método para reproducir audio con gestión de estado mejorada
   async playAudio(filePath) {
     return new Promise(async (resolve) => {
+      let audioProcess = null;
+      let timeoutId = null;
+      
+      const cleanup = () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (audioProcess && !audioProcess.killed) {
+          try {
+            audioProcess.kill('SIGTERM');
+            this.activeAudioProcesses.delete(audioProcess.pid);
+          } catch (e) {
+            // Proceso ya terminado
+          }
+        }
+        this.isPlayingAudio = false;
+      };
+
       try {
         this.isPlayingAudio = true;
         const platform = os.platform();
         let command;
+        let args = [];
         
         if (platform === 'linux') {
-          // Para Linux/WSL, intentar diferentes comandos
-          const players = ['mpg123', 'paplay', 'aplay', 'cvlc --play-and-exit'];
-          command = `${players[0]} "${filePath}" 2>/dev/null || ${players[1]} "${filePath}" 2>/dev/null || ${players[2]} "${filePath}" 2>/dev/null || ${players[3]} "${filePath}" 2>/dev/null`;
+          // Usar solo ffplay con argumentos separados para mejor control
+          command = 'ffplay';
+          args = ['-nodisp', '-autoexit', '-loglevel', 'quiet', filePath];
         } else if (platform === 'darwin') {
           // macOS
-          command = `afplay "${filePath}"`;
+          command = 'afplay';
+          args = [filePath];
         } else if (platform === 'win32') {
-          // Windows
-          command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
+          // Windows - usar powershell con timeout
+          command = 'powershell';
+          args = ['-c', `$player = New-Object Media.SoundPlayer '${filePath}'; $player.PlaySync()`];
         } else {
           logger.warn(`${this.emoji} Unsupported platform for audio playback: ${platform}`);
-          this.isPlayingAudio = false;
+          cleanup();
           resolve();
           return;
         }
@@ -347,24 +664,55 @@ class DinoChrome extends ServiceBase {
         // Obtener duración del audio
         const duration = await this.getAudioDuration(filePath);
         
-        exec(command, (error) => {
-          if (error) {
-            logger.warn(`${this.emoji} Failed to play audio: ${error.message}`);
-            this.isPlayingAudio = false;
-            resolve();
-          } else {
-            logger.info(`${this.emoji} Audio playback started: ${path.basename(filePath)} (${Math.round(duration)}ms)`);
-            // Esperar la duración del audio antes de marcar como completado
-            setTimeout(() => {
+        // Usar spawn para mejor control del proceso
+        const { spawn } = require('child_process');
+        audioProcess = spawn(command, args, {
+          stdio: ['ignore', 'ignore', 'pipe']
+        });
+        
+        // Registrar el proceso activo
+        this.activeAudioProcesses.add(audioProcess.pid);
+        
+        let hasResolved = false;
+        
+        audioProcess.on('close', (code) => {
+          if (!hasResolved) {
+            hasResolved = true;
+            if (code === 0) {
               logger.info(`${this.emoji} Audio playback completed: ${path.basename(filePath)}`);
-              this.isPlayingAudio = false;
-              resolve();
-            }, duration);
+            } else {
+              logger.warn(`${this.emoji} Audio process exited with code ${code}: ${path.basename(filePath)}`);
+            }
+            cleanup();
+            resolve();
           }
         });
+        
+        audioProcess.on('error', (error) => {
+          if (!hasResolved) {
+            hasResolved = true;
+            logger.warn(`${this.emoji} Failed to play audio: ${error.message}`);
+            cleanup();
+            resolve();
+          }
+        });
+        
+        // Timeout de seguridad basado en duración estimada + margen
+        const safetyTimeout = duration + 2000; // 2 segundos extra de margen
+        timeoutId = setTimeout(() => {
+          if (!hasResolved) {
+            hasResolved = true;
+            logger.warn(`${this.emoji} Audio playback timeout after ${safetyTimeout}ms: ${path.basename(filePath)}`);
+            cleanup();
+            resolve();
+          }
+        }, safetyTimeout);
+        
+        logger.info(`${this.emoji} Audio playback started: ${path.basename(filePath)} (estimated ${Math.round(duration)}ms)`);
+        
       } catch (error) {
-        logger.error(`${this.emoji} Error in audio playback: ${error}`);
-        this.isPlayingAudio = false;
+        logger.error(`${this.emoji} Error in audio playback: ${error.message}`);
+        cleanup();
         resolve();
       }
     });
@@ -374,10 +722,19 @@ class DinoChrome extends ServiceBase {
   async processAudioQueue() {
     if (this.audioQueue.length > 0 && !this.isPlayingAudio) {
       const nextAudio = this.audioQueue.shift();
-      logger.info(`${this.emoji} Processing queued rose audio: ${path.basename(nextAudio.path)} (${this.audioQueue.length} remaining)`);
-      await this.playAudio(nextAudio.path);
-      // Recursivamente procesar el siguiente en la cola
-      this.processAudioQueue();
+      const audioType = nextAudio.giftType || 'gift';
+      logger.info(`${this.emoji} Processing queued ${audioType} audio: ${path.basename(nextAudio.path)} (${this.audioQueue.length} remaining)`);
+      
+      try {
+        await this.playAudio(nextAudio.path);
+        // Recursivamente procesar el siguiente en la cola
+        this.processAudioQueue();
+      } catch (error) {
+        logger.error(`${this.emoji} Error processing queued audio: ${error.message}`);
+        this.isPlayingAudio = false;
+        // Continuar con el siguiente en la cola incluso si falló
+        this.processAudioQueue();
+      }
     }
   }
 
@@ -772,15 +1129,20 @@ class DinoChrome extends ServiceBase {
         if (gameStatus) {
           // Actualizar velocidad actual para el intervalo dinámico
           this.currentSpeed = gameStatus.speed || 6;
+          this.currentScore = gameStatus.score || 0;
+          
+          // Actualizar récord si es necesario
+          if (this.currentScore > this.highScore) {
+            this.highScore = this.currentScore;
+            console.log(`🏆 ¡NUEVO RÉCORD! ${this.highScore} puntos`);
+            logger.info(`${this.emoji} New session high score: ${this.highScore}`);
+          }
           
           if (gameStatus.crashed && this.isGameRunning) {
-            logger.info(`${this.emoji} Game Over! Score: ${gameStatus.score}. Restarting...`);
-            // Reiniciar el juego presionando espacio
-            await this.page.keyboard.press('Space');
-            // Reiniciar el sistema de saltos dinámicos
-            scheduleDynamicJump();
+            logger.info(`${this.emoji} Crash detected but immortality is active - Score: ${gameStatus.score}. Session Record: ${this.highScore}`);
+            // Ya no reiniciamos porque el dino es inmortal
           } else if (gameStatus.playing) {
-            logger.debug(`${this.emoji} Game running - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}`);
+            logger.debug(`${this.emoji} Game running - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}, Session Record: ${this.highScore}`);
           }
         }
       } catch (error) {
