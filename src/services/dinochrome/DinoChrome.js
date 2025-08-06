@@ -27,6 +27,10 @@ class DinoChrome extends ServiceBase {
     this.highScore = 0; // Récord máximo de la sesión
     this.currentScore = 0; // Puntuación actual
     
+    // Índices para reproducción secuencial de audios
+    this.roseAudioIndex = 0; // Índice actual para audios de rose
+    this.rosaAudioIndex = 0; // Índice actual para audios de rosa
+    
     // Configurar DinoChrome para procesar solo eventos finales de rachas de gifts
     this.setProcessOnlyFinalGifts(true);
     
@@ -556,7 +560,7 @@ class DinoChrome extends ServiceBase {
     }
   }
 
-  // Método para obtener un audio aleatorio de regalos (rose o rosa)
+  // Método para obtener un audio secuencial de regalos (rose o rosa)
   getRandomGiftAudio(giftType) {
     const timestamp = new Date().toISOString();
     
@@ -571,7 +575,8 @@ class DinoChrome extends ServiceBase {
       }
       
       const files = fs.readdirSync(audiosDir)
-        .filter(file => file.endsWith('.mp3'));
+        .filter(file => file.endsWith('.mp3'))
+        .sort(); // Ordenar archivos para reproducción secuencial consistente
       
       logger.info(`${this.emoji} [${timestamp}] Found ${files.length} MP3 files in ${giftType} directory: [${files.join(', ')}]`);
       
@@ -580,8 +585,23 @@ class DinoChrome extends ServiceBase {
         return null;
       }
       
-      const randomFile = files[Math.floor(Math.random() * files.length)];
-      const fullPath = path.join(audiosDir, randomFile);
+      // Seleccionar archivo basado en índice secuencial según el tipo
+      let currentIndex;
+      if (giftType === 'rose') {
+        currentIndex = this.roseAudioIndex;
+        // Avanzar al siguiente índice, reiniciar si llega al final
+        this.roseAudioIndex = (this.roseAudioIndex + 1) % files.length;
+      } else if (giftType === 'rosa') {
+        currentIndex = this.rosaAudioIndex;
+        // Avanzar al siguiente índice, reiniciar si llega al final
+        this.rosaAudioIndex = (this.rosaAudioIndex + 1) % files.length;
+      } else {
+        // Fallback a aleatorio para tipos desconocidos
+        currentIndex = Math.floor(Math.random() * files.length);
+      }
+      
+      const selectedFile = files[currentIndex];
+      const fullPath = path.join(audiosDir, selectedFile);
       
       // Verificar que el archivo existe
       if (!fs.existsSync(fullPath)) {
@@ -589,10 +609,11 @@ class DinoChrome extends ServiceBase {
         return null;
       }
       
-      logger.info(`${this.emoji} [${timestamp}] Selected random ${giftType} audio: ${randomFile} (${fullPath})`);
+      const nextIndex = giftType === 'rose' ? this.roseAudioIndex : (giftType === 'rosa' ? this.rosaAudioIndex : 'N/A');
+      logger.info(`${this.emoji} [${timestamp}] Selected sequential ${giftType} audio: ${selectedFile} (index: ${currentIndex}/${files.length-1}, next: ${nextIndex}) - ${fullPath}`);
       return fullPath;
     } catch (error) {
-      logger.error(`${this.emoji} [${timestamp}] Error getting random ${giftType} audio: ${error.message}`);
+      logger.error(`${this.emoji} [${timestamp}] Error getting sequential ${giftType} audio: ${error.message}`);
       return null;
     }
   }
