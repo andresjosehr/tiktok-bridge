@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Overlay - TikTok Bridge</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .info-box {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        .status-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        
+        .status-indicator.visible {
+            background: #28a745;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-show {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-hide {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-toggle {
+            background: #007bff;
+            color: white;
+        }
+        
+        button:hover {
+            opacity: 0.8;
+        }
+        
+        .url-info {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .url-info h3 {
+            margin-top: 0;
+        }
+        
+        .url {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 8px;
+            border-radius: 3px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 Control de Overlay</h1>
+        
+        <div class="info-box">
+            <strong>Instrucciones:</strong> Usa esta página para controlar la visibilidad de la imagen en OBS/TikTok Live Studio. Añade la URL del overlay como "Browser Source" en tu software de streaming.
+        </div>
+        
+        <div class="status">
+            <span>Estado del Overlay:</span>
+            <div class="status-indicator" id="status-indicator"></div>
+            <span id="status-text">Oculto</span>
+        </div>
+        
+        <div class="controls">
+            <button class="btn-show" id="btn-show">Mostrar</button>
+            <button class="btn-hide" id="btn-hide">Ocultar</button>
+            <button class="btn-toggle" id="btn-toggle">Toggle</button>
+        </div>
+        
+        <div class="url-info">
+            <h3>URL para OBS/TikTok Live Studio:</h3>
+            <div class="url" id="overlay-url">http://localhost:3000/overlay/overlay.html</div>
+            <br>
+            <strong>Configuración recomendada:</strong>
+            <ul>
+                <li>Ancho: 1920px</li>
+                <li>Alto: 1080px</li>
+                <li>Usar cache del navegador: No</li>
+                <li>Refrescar navegador cuando la escena se activa: Sí</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let currentStatus = false;
+        
+        // Actualizar estado
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/overlay/status');
+                const data = await response.json();
+                
+                currentStatus = data.visible;
+                const indicator = document.getElementById('status-indicator');
+                const text = document.getElementById('status-text');
+                
+                if (data.visible) {
+                    indicator.classList.add('visible');
+                    text.textContent = 'Visible';
+                } else {
+                    indicator.classList.remove('visible');
+                    text.textContent = 'Oculto';
+                }
+            } catch (error) {
+                console.error('Error updating status:', error);
+            }
+        }
+        
+        // Mostrar overlay
+        async function showOverlay() {
+            try {
+                const response = await fetch('/api/overlay/show', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus();
+                }
+            } catch (error) {
+                console.error('Error showing overlay:', error);
+            }
+        }
+        
+        // Ocultar overlay
+        async function hideOverlay() {
+            try {
+                const response = await fetch('/api/overlay/hide', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus();
+                }
+            } catch (error) {
+                console.error('Error hiding overlay:', error);
+            }
+        }
+        
+        // Toggle overlay
+        async function toggleOverlay() {
+            try {
+                const response = await fetch('/api/overlay/toggle', { method: 'POST' });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus();
+                }
+            } catch (error) {
+                console.error('Error toggling overlay:', error);
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('btn-show').addEventListener('click', showOverlay);
+        document.getElementById('btn-hide').addEventListener('click', hideOverlay);
+        document.getElementById('btn-toggle').addEventListener('click', toggleOverlay);
+        
+        // Actualizar estado cada segundo
+        setInterval(updateStatus, 1000);
+        
+        // Actualizar estado inicial
+        updateStatus();
+    </script>
+</body>
+</html>

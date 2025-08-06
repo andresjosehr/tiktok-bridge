@@ -6,12 +6,16 @@ const queueRoutes = require('./queue');
 const tiktokRoutes = require('./tiktok');
 const systemRoutes = require('./system');
 const configRoutes = require('./config');
+const assetsRoutes = require('./assets');
+const overlayRoutes = require('./overlay');
 
 // Mount routes
 router.use('/queue', queueRoutes);
 router.use('/tiktok', tiktokRoutes);
 router.use('/system', systemRoutes);
 router.use('/config', configRoutes);
+router.use('/assets', assetsRoutes);
+router.use('/overlay', overlayRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -22,7 +26,9 @@ router.get('/', (req, res) => {
       queue: '/api/queue',
       tiktok: '/api/tiktok',
       system: '/api/system',
-      config: '/api/config'
+      config: '/api/config',
+      assets: '/api/assets',
+      overlay: '/api/overlay'
     },
     documentation: {
       queue: [
@@ -62,6 +68,16 @@ router.get('/', (req, res) => {
         'POST /api/config/gmod - Update GMod configuration',
         'GET /api/config/features - Get feature flags',
         'POST /api/config/features - Update feature flags'
+      ],
+      assets: [
+        'GET /api/assets - List all assets',
+        'GET /api/assets/:filename - Get asset info'
+      ],
+      overlay: [
+        'GET /api/overlay/status - Get overlay visibility status',
+        'POST /api/overlay/show - Show overlay',
+        'POST /api/overlay/hide - Hide overlay',
+        'POST /api/overlay/toggle - Toggle overlay visibility'
       ]
     },
     timestamp: new Date().toISOString()

@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const http = require('http');
 
 class DinoChrome extends ServiceBase {
   constructor() {
@@ -279,7 +280,7 @@ class DinoChrome extends ServiceBase {
     const timestamp = new Date().toISOString();
     
     // GG para pruebas (checkeamos primero para que tenga prioridad)
-    const isRosa = (giftName === 'gg' || giftName.includes('gg'));
+    const isRosa = (giftName === 'rosa' || giftName.includes('Rosa'));
     // Rose de 1 moneda (solo si NO es rosa y el costo es 1)
     const isRose = (!isRosa && giftName === 'rose' && giftCost === 1);
     
@@ -543,10 +544,11 @@ class DinoChrome extends ServiceBase {
     this.audioQueue.push({
       path: audioPath,
       type: giftType,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      showOverlay: giftType === 'rose' // Solo mostrar overlay para roses (1 moneda)
     });
     
-    logger.info(`${this.emoji} Queued ${giftType} audio: ${path.basename(audioPath)} (queue size: ${this.audioQueue.length})`);
+    logger.info(`${this.emoji} Queued ${giftType} audio: ${path.basename(audioPath)} (queue size: ${this.audioQueue.length})${giftType === 'rose' ? ' [WITH OVERLAY]' : ''}`);
     
     // Procesar la cola si no se está reproduciendo audio
     if (!this.isPlayingAudio) {
@@ -737,7 +739,7 @@ class DinoChrome extends ServiceBase {
   }
 
   // Método SIMPLIFICADO para reproducir audio esperando la finalización real del proceso
-  async playAudio(filePath) {
+  async playAudio(filePath, shouldHideOverlay = false) {
     return new Promise(async (resolve) => {
       const startTimestamp = new Date().toISOString();
       const fileName = path.basename(filePath);
@@ -842,22 +844,25 @@ class DinoChrome extends ServiceBase {
         });
         
         let resolved = false;
-        const finish = (reason) => {
+        const finish = async (reason) => {
           if (!resolved) {
             resolved = true;
             const endTimestamp = new Date().toISOString();
             const playTime = Date.now() - processInfo.startTime;
             
-            logger.info(`${this.emoji} [${endTimestamp}] Audio finished: ${fileName} after ${playTime}ms (${reason})`);
+            logger.info(`${this.emoji} [${endTimestamp}] Audio finished: ${fileName} after ${playTime}ms (${reason})${shouldHideOverlay ? ' [HIDING OVERLAY]' : ''}`);
             
             this.isPlayingAudio = false;
             this.currentAudioProcess = null;
             this.activeAudioProcesses.delete(pid);
             
+            // Ocultar overlay si es necesario DESPUÉS de terminar el audio
+            if (shouldHideOverlay) {
+              await this.hideOverlay();
+            }
+            
             // Procesar siguiente audio en la cola después de una pausa breve
-            setTimeout(() => {
-              this.processAudioQueue();
-            }, 200);
+            this.processAudioQueue();
             
             resolve();
           }
@@ -927,17 +932,128 @@ class DinoChrome extends ServiceBase {
     const nextAudio = this.audioQueue.shift();
     const queueAge = Date.now() - nextAudio.timestamp;
     
-    logger.info(`${this.emoji} [${timestamp}] Processing queued audio: ${path.basename(nextAudio.path)} (age: ${queueAge}ms, remaining in queue: ${this.audioQueue.length})`);
+    logger.info(`${this.emoji} [${timestamp}] Processing queued audio: ${path.basename(nextAudio.path)} (age: ${queueAge}ms, remaining in queue: ${this.audioQueue.length})${nextAudio.showOverlay ? ' [WITH OVERLAY]' : ''}`);
     
     try {
-      await this.playAudio(nextAudio.path);
+      // Mostrar overlay si es necesario ANTES de reproducir el audio
+      if (nextAudio.showOverlay) {
+        await this.showOverlay();
+      }
+      
+      await this.playAudio(nextAudio.path, nextAudio.showOverlay);
     } catch (error) {
       logger.error(`${this.emoji} [${timestamp}] Error playing queued audio: ${error.message}`);
+      
+      // Si hay error y se mostró overlay, ocultarlo
+      if (nextAudio.showOverlay) {
+        await this.hideOverlay();
+      }
+      
       // Continuar con el siguiente audio después de una pausa
       setTimeout(() => {
         this.processAudioQueue();
       }, 500);
     }
+  }
+
+  // Método para mostrar el overlay
+  async showOverlay() {
+    return new Promise((resolve) => {
+      const postData = JSON.stringify({});
+      
+      const options = {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/overlay/show',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.success) {
+              logger.info(`${this.emoji} Overlay shown successfully`);
+              resolve(true);
+            } else {
+              logger.warn(`${this.emoji} Failed to show overlay: ${result.message}`);
+              resolve(false);
+            }
+          } catch (error) {
+            logger.error(`${this.emoji} Error parsing overlay response: ${error.message}`);
+            resolve(false);
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        logger.error(`${this.emoji} Error showing overlay: ${error.message}`);
+        resolve(false);
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  }
+
+  // Método para ocultar el overlay
+  async hideOverlay() {
+    return new Promise((resolve) => {
+      const postData = JSON.stringify({});
+      
+      const options = {
+        hostname: 'localhost',
+        port: 3000,
+        path: '/api/overlay/hide',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.success) {
+              logger.info(`${this.emoji} Overlay hidden successfully`);
+              resolve(true);
+            } else {
+              logger.warn(`${this.emoji} Failed to hide overlay: ${result.message}`);
+              resolve(false);
+            }
+          } catch (error) {
+            logger.error(`${this.emoji} Error parsing overlay response: ${error.message}`);
+            resolve(false);
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        logger.error(`${this.emoji} Error hiding overlay: ${error.message}`);
+        resolve(false);
+      });
+
+      req.write(postData);
+      req.end();
+    });
   }
 
   // Método para limpiar solo procesos muertos sin interrumpir audio activo
