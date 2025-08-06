@@ -27,6 +27,7 @@ class DinoChrome extends ServiceBase {
     this.audioCleanupInterval = null; // Limpieza periódica
     this.highScore = 0; // Récord máximo de la sesión
     this.currentScore = 0; // Puntuación actual
+    this.isRestartingGame = false; // Flag para evitar solapamiento de reinicio de juego
     
     // Índices para reproducción secuencial de audios
     this.roseAudioIndex = 0; // Índice actual para audios de rose
@@ -45,6 +46,56 @@ class DinoChrome extends ServiceBase {
       'tiktok:like': 1,       // Prioridad mínima para likes
       'tiktok:share': 10,     // Baja prioridad para shares
       'tiktok:viewerCount': 1 // Prioridad mínima para viewer count
+    });
+    
+    // Configurar prioridades específicas por tipo de regalo
+    // DinoChrome necesita diferentes prioridades según el regalo para manejar audio y reinicio de juego
+    this.setGiftPriorities({
+      // Prioridades por nombre específico de regalo
+      byName: {
+        'rose': 200,        // Rose de 1 moneda - Muy alta prioridad (reproduce audio inmediato)
+        'rosa': 250,        // Rosa - Máxima prioridad (audio + reinicia juego)
+        'gg': 250,          // GG en modo TEST - Máxima prioridad
+        'perfume': 180,     // Perfume - Alta prioridad
+        'confetti': 160,    // Confetti - Alta prioridad
+        'finger heart': 140, // Finger Heart - Prioridad media-alta
+        'tiktok': 120,      // TikTok logo - Prioridad media
+        'thumbs up': 100,   // Thumbs Up - Prioridad media
+      },
+      
+      // Prioridades por rango de costo (fallback cuando no hay coincidencia por nombre)
+      byCostRange: [
+        {
+          minCost: 100,     // 100+ monedas
+          maxCost: 999999,  // Sin límite superior
+          priority: 300,    // Prioridad ultra alta para regalos muy caros
+          description: 'Regalos premium (100+ monedas)'
+        },
+        {
+          minCost: 50,      // 50-99 monedas
+          maxCost: 99,
+          priority: 220,    // Prioridad muy alta
+          description: 'Regalos costosos (50-99 monedas)'
+        },
+        {
+          minCost: 10,      // 10-49 monedas
+          maxCost: 49,
+          priority: 180,    // Prioridad alta
+          description: 'Regalos medios (10-49 monedas)'
+        },
+        {
+          minCost: 5,       // 5-9 monedas
+          maxCost: 9,
+          priority: 160,    // Prioridad media-alta
+          description: 'Regalos baratos (5-9 monedas)'
+        },
+        {
+          minCost: 1,       // 1-4 monedas
+          maxCost: 4,
+          priority: 150,    // Prioridad media (por defecto para gifts normales)
+          description: 'Regalos básicos (1-4 monedas)'
+        }
+      ]
     });
     
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
@@ -315,15 +366,15 @@ class DinoChrome extends ServiceBase {
       // Reiniciar el juego primero
       await this.restartGame();
       
-      // Reproducir audio aleatorio de la carpeta rosa/
-      this.playGiftAudio('rosa', data);
+      // Reproducir audio aleatorio de la carpeta rosa/ Y ESPERAR a que termine
+      await this.playGiftAudio('rosa', data);
       
     } else {
       console.log(`🌹 ¡ROSE DE 1 MONEDA DETECTADA! Reproduciendo audio especial... 🌹`);
       logger.info(`${this.emoji} [${timestamp}] Rose gift detected! Cost: ${giftCost} coins, playing audio...`);
       
-      // Reproducir audio aleatorio de la carpeta rose/
-      this.playGiftAudio('rose', data);
+      // Reproducir audio aleatorio de la carpeta rose/ Y ESPERAR a que termine
+      await this.playGiftAudio('rose', data);
     }
     
     logger.info(`${this.emoji} DinoChrome processed gift from ${data.uniqueId}: ${data.giftName} x${data.repeatCount}`);
@@ -427,6 +478,13 @@ class DinoChrome extends ServiceBase {
         return false;
       }
       
+      // Evitar solapamiento de reinicios de juego
+      if (this.isRestartingGame) {
+        logger.info(`${this.emoji} Game restart already in progress, skipping this request`);
+        return false;
+      }
+      
+      this.isRestartingGame = true;
       logger.info(`${this.emoji} Restarting Chrome Dino game by navigating to chrome://dino/...`);
       
       // Guardar el récord actual antes de reiniciar
@@ -549,31 +607,41 @@ class DinoChrome extends ServiceBase {
     } catch (error) {
       logger.error(`${this.emoji} Error restarting game: ${error.message}`);
       return false;
+    } finally {
+      // Siempre liberar el flag de reinicio, incluso si hay error
+      this.isRestartingGame = false;
     }
   }
 
   // Método SIMPLIFICADO para reproducir audio de regalo 
-  playGiftAudio(giftType, data) {
+  async playGiftAudio(giftType, data) {
     const audioPath = this.getRandomGiftAudio(giftType);
     if (!audioPath) {
       logger.warn(`${this.emoji} No ${giftType} audio file found`);
       return;
     }
 
-    // Agregar a la cola en lugar de interrumpir inmediatamente
-    this.audioQueue.push({
-      path: audioPath,
-      type: giftType,
-      timestamp: Date.now(),
-      showOverlay: giftType === 'rose' // Solo mostrar overlay para roses (1 moneda)
+    // Crear una promesa que se resuelve cuando el audio específico termine
+    return new Promise((resolve) => {
+      const audioId = `${giftType}_${Date.now()}_${Math.random()}`;
+      
+      // Agregar a la cola con callback de resolución
+      this.audioQueue.push({
+        path: audioPath,
+        type: giftType,
+        timestamp: Date.now(),
+        showOverlay: giftType === 'rose', // Solo mostrar overlay para roses (1 moneda)
+        id: audioId,
+        onComplete: resolve // Callback para resolver la promesa cuando termine
+      });
+      
+      logger.info(`${this.emoji} Queued ${giftType} audio: ${path.basename(audioPath)} (queue size: ${this.audioQueue.length})${giftType === 'rose' ? ' [WITH OVERLAY]' : ''}`);
+      
+      // Procesar la cola si no se está reproduciendo audio
+      if (!this.isPlayingAudio) {
+        this.processAudioQueue();
+      }
     });
-    
-    logger.info(`${this.emoji} Queued ${giftType} audio: ${path.basename(audioPath)} (queue size: ${this.audioQueue.length})${giftType === 'rose' ? ' [WITH OVERLAY]' : ''}`);
-    
-    // Procesar la cola si no se está reproduciendo audio
-    if (!this.isPlayingAudio) {
-      this.processAudioQueue();
-    }
   }
 
   // Método para obtener un audio secuencial de regalos (rose o rosa)
@@ -983,12 +1051,25 @@ class DinoChrome extends ServiceBase {
       }
       
       await this.playAudio(nextAudio.path, nextAudio.showOverlay);
+      
+      // Llamar al callback de finalización si existe
+      if (nextAudio.onComplete && typeof nextAudio.onComplete === 'function') {
+        logger.debug(`${this.emoji} [${timestamp}] Calling onComplete callback for audio ${nextAudio.id || 'unknown'}`);
+        nextAudio.onComplete();
+      }
+      
     } catch (error) {
       logger.error(`${this.emoji} [${timestamp}] Error playing queued audio: ${error.message}`);
       
       // Si hay error y se mostró overlay, ocultarlo
       if (nextAudio.showOverlay) {
         await this.hideOverlay();
+      }
+      
+      // Llamar al callback de error también para resolver la promesa
+      if (nextAudio.onComplete && typeof nextAudio.onComplete === 'function') {
+        logger.debug(`${this.emoji} [${timestamp}] Calling onComplete callback after error for audio ${nextAudio.id || 'unknown'}`);
+        nextAudio.onComplete();
       }
       
       // Continuar con el siguiente audio después de una pausa

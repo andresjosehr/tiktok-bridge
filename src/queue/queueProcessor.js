@@ -33,13 +33,23 @@ class QueueProcessor {
   }
   
   setupServicePriorities() {
-    // Si el servicio tiene prioridades personalizadas, registrarlas en el QueueManager
+    const serviceId = this.activeService.serviceName;
+    
+    // Si el servicio tiene prioridades personalizadas de eventos, registrarlas en el QueueManager
     if (this.activeService && typeof this.activeService.getEventPriorities === 'function') {
       const customPriorities = this.activeService.getEventPriorities();
       if (customPriorities) {
-        const serviceId = this.activeService.serviceName;
         queueManager.setServiceEventPriorities(serviceId, customPriorities);
-        logger.info(`${this.name} registered custom priorities for service ${serviceId}`);
+        logger.info(`${this.name} registered custom event priorities for service ${serviceId}`);
+      }
+    }
+    
+    // Si el servicio tiene prioridades personalizadas de regalos, registrarlas en el QueueManager
+    if (this.activeService && typeof this.activeService.getGiftPriorities === 'function') {
+      const giftPriorities = this.activeService.getGiftPriorities();
+      if (giftPriorities) {
+        queueManager.setServiceGiftPriorities(serviceId, giftPriorities);
+        logger.info(`${this.name} registered gift-specific priorities for service ${serviceId}`);
       }
     }
   }

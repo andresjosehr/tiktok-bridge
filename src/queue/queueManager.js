@@ -21,6 +21,9 @@ class QueueManager {
     // Cache de prioridades por servicio
     this.servicePriorities = new Map();
     
+    // Cache de prioridades específicas por regalo por servicio
+    this.serviceGiftPriorities = new Map();
+    
     this.maxQueueSize = config.queue.maxSize || 1000;
     this.giftEventTypes = ['tiktok:gift', 'tiktok:donation'];
     this.processors = []; // Lista de procesadores registrados
@@ -29,7 +32,7 @@ class QueueManager {
   async addEvent(eventType, eventData, options = {}) {
     try {
       const serviceId = options.serviceId || null;
-      const priority = this.getEventPriority(eventType, serviceId);
+      const priority = this.getEventPriority(eventType, serviceId, eventData);
       const maxAttempts = options.maxAttempts || config.queue.maxAttempts || 3;
       
       await this.enforceQueueLimits(eventType, priority);
@@ -98,7 +101,36 @@ class QueueManager {
     return await EventQueue.removeOldestNonGiftEvents(eventsToRemove);
   }
 
-  getEventPriority(eventType, serviceId = null) {
+  getEventPriority(eventType, serviceId = null, eventData = null) {
+    // Si es un regalo y hay datos del evento, verificar prioridades específicas de regalo
+    if ((eventType === 'tiktok:gift' || eventType === 'tiktok:donation') && serviceId && eventData) {
+      const giftPriorities = this.serviceGiftPriorities.get(serviceId);
+      if (giftPriorities) {
+        const giftName = eventData.giftName || eventData.gift_name;
+        const giftId = eventData.giftId || eventData.gift_id;
+        const giftCost = eventData.cost || eventData.gift_cost || 0;
+        
+        // Buscar por nombre específico del regalo
+        if (giftName && giftPriorities.byName && giftPriorities.byName[giftName.toLowerCase()]) {
+          return giftPriorities.byName[giftName.toLowerCase()];
+        }
+        
+        // Buscar por ID del regalo
+        if (giftId && giftPriorities.byId && giftPriorities.byId[giftId]) {
+          return giftPriorities.byId[giftId];
+        }
+        
+        // Buscar por rango de costo
+        if (giftCost > 0 && giftPriorities.byCostRange) {
+          for (const range of giftPriorities.byCostRange) {
+            if (giftCost >= range.minCost && giftCost <= range.maxCost) {
+              return range.priority;
+            }
+          }
+        }
+      }
+    }
+    
     // Si hay un servicio específico y tiene prioridades personalizadas
     if (serviceId && this.servicePriorities.has(serviceId)) {
       const servicePriorities = this.servicePriorities.get(serviceId);
@@ -348,6 +380,82 @@ class QueueManager {
     }
   }
   
+  // Método para establecer prioridades específicas por tipo de regalo
+  setServiceGiftPriorities(serviceId, giftPriorities) {
+    if (!serviceId) {
+      logger.warn('Cannot set gift priorities without serviceId');
+      return false;
+    }
+    
+    if (!giftPriorities || typeof giftPriorities !== 'object') {
+      logger.warn(`Invalid gift priorities provided for service ${serviceId}`);
+      return false;
+    }
+    
+    const validatedGiftPriorities = {
+      byName: {},
+      byId: {},
+      byCostRange: []
+    };
+    
+    let hasValidPriorities = false;
+    
+    // Validar prioridades por nombre de regalo
+    if (giftPriorities.byName && typeof giftPriorities.byName === 'object') {
+      for (const [giftName, priority] of Object.entries(giftPriorities.byName)) {
+        if (typeof priority === 'number' && priority >= 0) {
+          validatedGiftPriorities.byName[giftName.toLowerCase()] = priority;
+          hasValidPriorities = true;
+        } else {
+          logger.warn(`Invalid priority for gift name '${giftName}': ${priority} (must be a number >= 0)`);
+        }
+      }
+    }
+    
+    // Validar prioridades por ID de regalo
+    if (giftPriorities.byId && typeof giftPriorities.byId === 'object') {
+      for (const [giftId, priority] of Object.entries(giftPriorities.byId)) {
+        if (typeof priority === 'number' && priority >= 0) {
+          validatedGiftPriorities.byId[giftId] = priority;
+          hasValidPriorities = true;
+        } else {
+          logger.warn(`Invalid priority for gift ID '${giftId}': ${priority} (must be a number >= 0)`);
+        }
+      }
+    }
+    
+    // Validar prioridades por rango de costo
+    if (giftPriorities.byCostRange && Array.isArray(giftPriorities.byCostRange)) {
+      for (const range of giftPriorities.byCostRange) {
+        if (range && 
+            typeof range.minCost === 'number' && range.minCost >= 0 &&
+            typeof range.maxCost === 'number' && range.maxCost >= range.minCost &&
+            typeof range.priority === 'number' && range.priority >= 0) {
+          validatedGiftPriorities.byCostRange.push({
+            minCost: range.minCost,
+            maxCost: range.maxCost,
+            priority: range.priority
+          });
+          hasValidPriorities = true;
+        } else {
+          logger.warn(`Invalid cost range configuration:`, range);
+        }
+      }
+      
+      // Ordenar rangos de costo por minCost para búsqueda eficiente
+      validatedGiftPriorities.byCostRange.sort((a, b) => a.minCost - b.minCost);
+    }
+    
+    if (hasValidPriorities) {
+      this.serviceGiftPriorities.set(serviceId, validatedGiftPriorities);
+      logger.info(`Gift-specific priorities set for service ${serviceId}:`, validatedGiftPriorities);
+      return true;
+    } else {
+      logger.warn(`No valid gift priorities provided for service ${serviceId}`);
+      return false;
+    }
+  }
+  
   // Método para obtener las prioridades de un servicio específico
   getServiceEventPriorities(serviceId) {
     if (!serviceId) {
@@ -365,9 +473,30 @@ class QueueManager {
   
   // Método para limpiar las prioridades de un servicio
   clearServiceEventPriorities(serviceId) {
+    let cleared = false;
+    
     if (serviceId && this.servicePriorities.has(serviceId)) {
       this.servicePriorities.delete(serviceId);
+      cleared = true;
+    }
+    
+    if (serviceId && this.serviceGiftPriorities.has(serviceId)) {
+      this.serviceGiftPriorities.delete(serviceId);
+      cleared = true;
+    }
+    
+    if (cleared) {
       logger.info(`Custom priorities cleared for service ${serviceId}`);
+      return true;
+    }
+    return false;
+  }
+  
+  // Método para limpiar solo las prioridades de regalos de un servicio
+  clearServiceGiftPriorities(serviceId) {
+    if (serviceId && this.serviceGiftPriorities.has(serviceId)) {
+      this.serviceGiftPriorities.delete(serviceId);
+      logger.info(`Gift priorities cleared for service ${serviceId}`);
       return true;
     }
     return false;
@@ -381,10 +510,29 @@ class QueueManager {
     };
     
     for (const [serviceId, priorities] of this.servicePriorities.entries()) {
-      result.services[serviceId] = { ...this.defaultEventPriorities, ...priorities };
+      result.services[serviceId] = { 
+        eventPriorities: { ...this.defaultEventPriorities, ...priorities },
+        giftPriorities: this.serviceGiftPriorities.get(serviceId) || null
+      };
+    }
+    
+    // Agregar servicios que solo tienen prioridades de regalos
+    for (const [serviceId, giftPriorities] of this.serviceGiftPriorities.entries()) {
+      if (!result.services[serviceId]) {
+        result.services[serviceId] = {
+          eventPriorities: { ...this.defaultEventPriorities },
+          giftPriorities: giftPriorities
+        };
+      }
     }
     
     return result;
+  }
+  
+  // Método para obtener las prioridades de regalos de un servicio específico
+  getServiceGiftPriorities(serviceId) {
+    if (!serviceId) return null;
+    return this.serviceGiftPriorities.get(serviceId) || null;
   }
 
   // Notificar a todos los procesadores que hay nuevos trabajos
