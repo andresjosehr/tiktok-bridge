@@ -35,6 +35,18 @@ class DinoChrome extends ServiceBase {
     // Configurar DinoChrome para procesar solo eventos finales de rachas de gifts
     this.setProcessOnlyFinalGifts(true);
     
+    // Configurar prioridades personalizadas para DinoChrome
+    // DinoChrome prioriza gifts y donations muy alto ya que reproduce audio y reinicia el juego
+    this.setEventPriorities({
+      'tiktok:gift': 150,     // Muy alta prioridad para gifts (reproduce audio)
+      'tiktok:donation': 150, // Muy alta prioridad para donations
+      'tiktok:follow': 20,    // Baja prioridad para follows (solo logging)
+      'tiktok:chat': 5,       // Muy baja prioridad para chat (solo logging)
+      'tiktok:like': 1,       // Prioridad mínima para likes
+      'tiktok:share': 10,     // Baja prioridad para shares
+      'tiktok:viewerCount': 1 // Prioridad mínima para viewer count
+    });
+    
     logger.info(`${this.emoji} DinoChrome service initialized - Ready to control Chrome Dino game!`);
   }
 

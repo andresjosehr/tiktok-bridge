@@ -4,7 +4,7 @@ const config = require('../config/config');
 
 class QueueManager {
   constructor() {
-    this.eventPriorities = {
+    this.defaultEventPriorities = {
       'tiktok:gift': 100,
       'tiktok:donation': 100,
       'tiktok:follow': 50,
@@ -15,6 +15,12 @@ class QueueManager {
       'default': 0
     };
     
+    // Prioridades actuales (pueden ser sobrescritas por servicios)
+    this.eventPriorities = { ...this.defaultEventPriorities };
+    
+    // Cache de prioridades por servicio
+    this.servicePriorities = new Map();
+    
     this.maxQueueSize = config.queue.maxSize || 1000;
     this.giftEventTypes = ['tiktok:gift', 'tiktok:donation'];
     this.processors = []; // Lista de procesadores registrados
@@ -22,7 +28,8 @@ class QueueManager {
 
   async addEvent(eventType, eventData, options = {}) {
     try {
-      const priority = this.getEventPriority(eventType);
+      const serviceId = options.serviceId || null;
+      const priority = this.getEventPriority(eventType, serviceId);
       const maxAttempts = options.maxAttempts || config.queue.maxAttempts || 3;
       
       await this.enforceQueueLimits(eventType, priority);
@@ -39,13 +46,15 @@ class QueueManager {
         event_data: eventData,
         priority: priority,
         max_attempts: maxAttempts,
-        repeat_end: repeatEnd
+        repeat_end: repeatEnd,
+        service_id: serviceId
       });
       
       const queueId = queueItem.id;
       
       const repeatEndMsg = repeatEnd !== null ? `, repeat_end: ${repeatEnd}` : '';
-      logger.debug(`Event added to queue: ${eventType} (ID: ${queueId}, Priority: ${priority}${repeatEndMsg})`);
+      const serviceMsg = serviceId ? `, service: ${serviceId}` : '';
+      logger.debug(`Event added to queue: ${eventType} (ID: ${queueId}, Priority: ${priority}${repeatEndMsg}${serviceMsg})`);
       
       // Notificar a todos los procesadores que hay un nuevo trabajo
       this.notifyProcessors();
@@ -89,7 +98,16 @@ class QueueManager {
     return await EventQueue.removeOldestNonGiftEvents(eventsToRemove);
   }
 
-  getEventPriority(eventType) {
+  getEventPriority(eventType, serviceId = null) {
+    // Si hay un servicio específico y tiene prioridades personalizadas
+    if (serviceId && this.servicePriorities.has(serviceId)) {
+      const servicePriorities = this.servicePriorities.get(serviceId);
+      if (servicePriorities[eventType] !== undefined) {
+        return servicePriorities[eventType];
+      }
+    }
+    
+    // Usar prioridades por defecto
     return this.eventPriorities[eventType] || this.eventPriorities.default;
   }
 
@@ -298,6 +316,75 @@ class QueueManager {
       this.processors.splice(index, 1);
       logger.debug(`Processor ${processor.name} unregistered from notifications`);
     }
+  }
+
+  // Método para establecer prioridades personalizadas para un servicio
+  setServiceEventPriorities(serviceId, customPriorities) {
+    if (!serviceId) {
+      logger.warn('Cannot set service priorities without serviceId');
+      return false;
+    }
+    
+    // Validar que las prioridades sean números
+    const validatedPriorities = {};
+    let hasValidPriorities = false;
+    
+    for (const [eventType, priority] of Object.entries(customPriorities)) {
+      if (typeof priority === 'number' && priority >= 0) {
+        validatedPriorities[eventType] = priority;
+        hasValidPriorities = true;
+      } else {
+        logger.warn(`Invalid priority for ${eventType}: ${priority} (must be a number >= 0)`);
+      }
+    }
+    
+    if (hasValidPriorities) {
+      this.servicePriorities.set(serviceId, validatedPriorities);
+      logger.info(`Custom event priorities set for service ${serviceId}:`, validatedPriorities);
+      return true;
+    } else {
+      logger.warn(`No valid priorities provided for service ${serviceId}`);
+      return false;
+    }
+  }
+  
+  // Método para obtener las prioridades de un servicio específico
+  getServiceEventPriorities(serviceId) {
+    if (!serviceId) {
+      return { ...this.defaultEventPriorities };
+    }
+    
+    const servicePriorities = this.servicePriorities.get(serviceId);
+    if (servicePriorities) {
+      // Combinar prioridades por defecto con las del servicio
+      return { ...this.defaultEventPriorities, ...servicePriorities };
+    }
+    
+    return { ...this.defaultEventPriorities };
+  }
+  
+  // Método para limpiar las prioridades de un servicio
+  clearServiceEventPriorities(serviceId) {
+    if (serviceId && this.servicePriorities.has(serviceId)) {
+      this.servicePriorities.delete(serviceId);
+      logger.info(`Custom priorities cleared for service ${serviceId}`);
+      return true;
+    }
+    return false;
+  }
+  
+  // Método para obtener todas las prioridades de servicios registrados
+  getAllServicePriorities() {
+    const result = {
+      default: this.defaultEventPriorities,
+      services: {}
+    };
+    
+    for (const [serviceId, priorities] of this.servicePriorities.entries()) {
+      result.services[serviceId] = { ...this.defaultEventPriorities, ...priorities };
+    }
+    
+    return result;
   }
 
   // Notificar a todos los procesadores que hay nuevos trabajos

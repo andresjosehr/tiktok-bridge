@@ -18,6 +18,7 @@ class QueueProcessor {
     this.waitingForJob = false;
     this.activeService = activeService;
     this.setupEventHandlers();
+    this.setupServicePriorities();
   }
 
   setupEventHandlers() {
@@ -29,6 +30,18 @@ class QueueProcessor {
     this.eventHandlers.set('tiktok:like', this.activeService.handleTikTokLike.bind(this.activeService));
     this.eventHandlers.set('tiktok:share', this.activeService.handleTikTokShare.bind(this.activeService));
     this.eventHandlers.set('tiktok:viewerCount', this.activeService.handleViewerCount.bind(this.activeService));
+  }
+  
+  setupServicePriorities() {
+    // Si el servicio tiene prioridades personalizadas, registrarlas en el QueueManager
+    if (this.activeService && typeof this.activeService.getEventPriorities === 'function') {
+      const customPriorities = this.activeService.getEventPriorities();
+      if (customPriorities) {
+        const serviceId = this.activeService.serviceName;
+        queueManager.setServiceEventPriorities(serviceId, customPriorities);
+        logger.info(`${this.name} registered custom priorities for service ${serviceId}`);
+      }
+    }
   }
 
   async start() {
@@ -196,8 +209,14 @@ class QueueProcessor {
   }
 
   changeActiveService(newService) {
+    // Limpiar las prioridades del servicio anterior si existen
+    if (this.activeService && this.activeService.serviceName) {
+      queueManager.clearServiceEventPriorities(this.activeService.serviceName);
+    }
+    
     this.activeService = newService;
     this.setupEventHandlers();
+    this.setupServicePriorities();
     logger.info(`${this.name} switched to service: ${newService.serviceName}`);
   }
 

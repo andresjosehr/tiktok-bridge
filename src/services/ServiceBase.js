@@ -7,6 +7,7 @@ class ServiceBase {
     this.connectedAt = null;
     this.lastActivity = null;
     this.processOnlyFinalGifts = false; // Por defecto procesar todos los gifts
+    this.customEventPriorities = null; // Prioridades personalizadas del servicio
   }
 
   async handleTikTokChat(data) {
@@ -46,7 +47,8 @@ class ServiceBase {
       serviceName: this.serviceName,
       isConnected: this._isConnected,
       connectedAt: this.connectedAt,
-      lastActivity: this.lastActivity
+      lastActivity: this.lastActivity,
+      hasCustomPriorities: this.customEventPriorities !== null
     };
   }
 
@@ -86,6 +88,56 @@ class ServiceBase {
       // Si repeat_end es true (final de racha), NO procesar
       return repeatEnd !== true;
     }
+  }
+  
+  // Método para establecer prioridades personalizadas de eventos
+  setEventPriorities(customPriorities) {
+    if (!customPriorities || typeof customPriorities !== 'object') {
+      logger.warn(`${this.serviceName}: Invalid custom priorities provided`);
+      return false;
+    }
+    
+    // Validar que las prioridades sean números válidos
+    const validatedPriorities = {};
+    let hasValidPriorities = false;
+    
+    for (const [eventType, priority] of Object.entries(customPriorities)) {
+      if (typeof priority === 'number' && priority >= 0) {
+        validatedPriorities[eventType] = priority;
+        hasValidPriorities = true;
+      } else {
+        logger.warn(`${this.serviceName}: Invalid priority for ${eventType}: ${priority} (must be a number >= 0)`);
+      }
+    }
+    
+    if (hasValidPriorities) {
+      this.customEventPriorities = validatedPriorities;
+      logger.info(`${this.serviceName}: Custom event priorities set:`, validatedPriorities);
+      return true;
+    } else {
+      logger.warn(`${this.serviceName}: No valid priorities provided`);
+      return false;
+    }
+  }
+  
+  // Método para obtener las prioridades personalizadas
+  getEventPriorities() {
+    return this.customEventPriorities ? { ...this.customEventPriorities } : null;
+  }
+  
+  // Método para limpiar las prioridades personalizadas
+  clearEventPriorities() {
+    if (this.customEventPriorities) {
+      this.customEventPriorities = null;
+      logger.info(`${this.serviceName}: Custom event priorities cleared`);
+      return true;
+    }
+    return false;
+  }
+  
+  // Método helper para definir prioridades de manera más conveniente
+  definePriorities(priorities) {
+    return this.setEventPriorities(priorities);
   }
 }
 
