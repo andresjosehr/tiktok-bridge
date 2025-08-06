@@ -35,6 +35,13 @@ class QueueManager {
       const priority = this.getEventPriority(eventType, serviceId, eventData);
       const maxAttempts = options.maxAttempts || config.queue.maxAttempts || 3;
       
+      // Debug logging para prioridades de regalo
+      if ((eventType === 'tiktok:gift' || eventType === 'tiktok:donation') && serviceId) {
+        const giftName = eventData.giftName || eventData.gift_name || 'unknown';
+        const giftCost = eventData.cost || eventData.gift_cost || 0;
+        logger.info(`🎯 Gift priority calculation: ${giftName} (cost: ${giftCost}) -> Priority: ${priority} for service ${serviceId}`);
+      }
+      
       await this.enforceQueueLimits(eventType, priority);
       
       // Determinar repeat_end basado en el tipo de evento y datos
@@ -110,24 +117,35 @@ class QueueManager {
         const giftId = eventData.giftId || eventData.gift_id;
         const giftCost = eventData.cost || eventData.gift_cost || 0;
         
+        logger.debug(`🔍 Gift priority lookup for service ${serviceId}: name="${giftName}", id="${giftId}", cost=${giftCost}`);
+        
         // Buscar por nombre específico del regalo
         if (giftName && giftPriorities.byName && giftPriorities.byName[giftName.toLowerCase()]) {
-          return giftPriorities.byName[giftName.toLowerCase()];
+          const priority = giftPriorities.byName[giftName.toLowerCase()];
+          logger.debug(`✅ Found gift priority by name: ${giftName.toLowerCase()} -> ${priority}`);
+          return priority;
         }
         
         // Buscar por ID del regalo
         if (giftId && giftPriorities.byId && giftPriorities.byId[giftId]) {
-          return giftPriorities.byId[giftId];
+          const priority = giftPriorities.byId[giftId];
+          logger.debug(`✅ Found gift priority by ID: ${giftId} -> ${priority}`);
+          return priority;
         }
         
         // Buscar por rango de costo
         if (giftCost > 0 && giftPriorities.byCostRange) {
           for (const range of giftPriorities.byCostRange) {
             if (giftCost >= range.minCost && giftCost <= range.maxCost) {
+              logger.debug(`✅ Found gift priority by cost range: ${giftCost} in [${range.minCost}-${range.maxCost}] -> ${range.priority}`);
               return range.priority;
             }
           }
         }
+        
+        logger.debug(`❌ No specific gift priority found, falling back to service event priority`);
+      } else {
+        logger.debug(`❌ No gift priorities configured for service ${serviceId}`);
       }
     }
     
@@ -135,12 +153,16 @@ class QueueManager {
     if (serviceId && this.servicePriorities.has(serviceId)) {
       const servicePriorities = this.servicePriorities.get(serviceId);
       if (servicePriorities[eventType] !== undefined) {
-        return servicePriorities[eventType];
+        const priority = servicePriorities[eventType];
+        logger.debug(`✅ Found service event priority: ${eventType} for ${serviceId} -> ${priority}`);
+        return priority;
       }
     }
     
     // Usar prioridades por defecto
-    return this.eventPriorities[eventType] || this.eventPriorities.default;
+    const defaultPriority = this.eventPriorities[eventType] || this.eventPriorities.default;
+    logger.debug(`🔄 Using default priority: ${eventType} -> ${defaultPriority}`);
+    return defaultPriority;
   }
 
   isGiftEvent(eventType) {

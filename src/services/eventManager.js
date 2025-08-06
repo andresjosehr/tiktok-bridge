@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const logger = require('../utils/logger');
 const queueManager = require('../queue/queueManager');
+const queueProcessorManager = require('../queue/queueProcessor');
 
 class EventManager extends EventEmitter {
   constructor() {
@@ -57,7 +58,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokChat(data) {
     try {
-      await queueManager.addEvent('tiktok:chat', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:chat', data, { serviceId });
     } catch (error) {
       if (error.isQueueFull) {
         // logger.info('Queue full, skipping chat event (priority too low)');
@@ -74,7 +78,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokGift(data) {
     try {
-      await queueManager.addEvent('tiktok:gift', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:gift', data, { serviceId });
     } catch (error) {
       logger.error('Failed to add gift event to queue:', error);
     }
@@ -87,7 +94,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokFollow(data) {
     try {
-      await queueManager.addEvent('tiktok:follow', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:follow', data, { serviceId });
     } catch (error) {
       logger.error('Failed to add follow event to queue:', error);
     }
@@ -100,7 +110,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokLike(data) {
     try {
-      await queueManager.addEvent('tiktok:like', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:like', data, { serviceId });
     } catch (error) {
       if (error.isQueueFull) {
         // logger.info('Queue full, skipping like event (priority too low)');
@@ -112,7 +125,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokShare(data) {
     try {
-      await queueManager.addEvent('tiktok:share', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:share', data, { serviceId });
     } catch (error) {
       if (error.isQueueFull) {
         // logger.info('Queue full, skipping share event (priority too low)');
@@ -124,7 +140,10 @@ class EventManager extends EventEmitter {
 
   async handleTikTokViewerCount(data) {
     try {
-      await queueManager.addEvent('tiktok:viewerCount', data);
+      const activeService = queueProcessorManager.getActiveService();
+      const serviceId = activeService ? activeService.serviceName : null;
+      
+      await queueManager.addEvent('tiktok:viewerCount', data, { serviceId });
     } catch (error) {
       if (error.isQueueFull) {
         // logger.info('Queue full, skipping viewer count event (priority too low)');
