@@ -3,6 +3,7 @@ require('dotenv').config();
 module.exports = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
+  TEST: process.env.TEST || 'false',
   
   tiktok: {
     username: process.env.TIKTOK_USERNAME || '',

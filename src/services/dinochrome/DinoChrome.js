@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const http = require('http');
+const config = require('../../config/config');
 
 class DinoChrome extends ServiceBase {
   constructor() {
@@ -283,16 +284,21 @@ class DinoChrome extends ServiceBase {
     const giftName = data.giftName ? data.giftName.toLowerCase() : '';
     const timestamp = new Date().toISOString();
     
+    // Verificar si estamos en modo TEST
+    const isTestMode = config.TEST === 'true' || config.TEST === true;
+    
     // GG para pruebas (checkeamos primero para que tenga prioridad)
+    const isGG = (giftName === 'gg' || giftName.includes('GG') || giftName.includes('gg'));
     const isRosa = (giftName === 'rosa' || giftName.includes('Rosa'));
     // Rose de 1 moneda (solo si NO es rosa y el costo es 1)
     const isRose = (!isRosa && giftName === 'rose' && giftCost === 1);
     
-    logger.info(`${this.emoji} [${timestamp}] Gift analysis - Name: "${giftName}", Cost: ${giftCost}, isRosa: ${isRosa}, isRose: ${isRose}`);
+    logger.info(`${this.emoji} [${timestamp}] Gift analysis - Name: "${giftName}", Cost: ${giftCost}, isRosa: ${isRosa}, isRose: ${isRose}, isGG: ${isGG}, TEST_MODE: ${isTestMode}`);
     
-    if (isRosa) {
-      console.log(`🎮 ¡GG DETECTADO! Reiniciando juego y reproduciendo audio especial... 🎮`);
-      logger.info(`${this.emoji} [${timestamp}] GG detected! Cost: ${giftCost} coins, restarting game and playing audio...`);
+    // En modo TEST, GG activa overlay como Rose
+   if ((!isTestMode && isRosa) || (isTestMode && isGG)) {
+      console.log(`🎮 ¡ROSA DETECTADA! Reiniciando juego y reproduciendo audio especial... 🎮`);
+      logger.info(`${this.emoji} [${timestamp}] Rosa detected! Cost: ${giftCost} coins, restarting game and playing audio...`);
       
       // Reiniciar el juego primero
       await this.restartGame();
@@ -300,14 +306,12 @@ class DinoChrome extends ServiceBase {
       // Reproducir audio aleatorio de la carpeta rosa/
       this.playGiftAudio('rosa', data);
       
-    } else if (isRose) {
+    } else {
       console.log(`🌹 ¡ROSE DE 1 MONEDA DETECTADA! Reproduciendo audio especial... 🌹`);
       logger.info(`${this.emoji} [${timestamp}] Rose gift detected! Cost: ${giftCost} coins, playing audio...`);
       
       // Reproducir audio aleatorio de la carpeta rose/
       this.playGiftAudio('rose', data);
-    } else {
-      logger.info(`${this.emoji} [${timestamp}] Gift not matching rose criteria - no audio triggered`);
     }
     
     logger.info(`${this.emoji} DinoChrome processed gift from ${data.uniqueId}: ${data.giftName} x${data.repeatCount}`);
@@ -878,8 +882,11 @@ class DinoChrome extends ServiceBase {
             this.activeAudioProcesses.delete(pid);
             
             // Ocultar overlay si es necesario DESPUÉS de terminar el audio
+            // Agregar pausa para que el overlay se mantenga visible por un tiempo
             if (shouldHideOverlay) {
-              await this.hideOverlay();
+              setTimeout(async () => {
+                await this.hideOverlay();
+              }, 1500); // 1.5 segundos adicionales para mostrar el overlay
             }
             
             // Procesar siguiente audio en la cola después de una pausa breve
@@ -959,6 +966,8 @@ class DinoChrome extends ServiceBase {
       // Mostrar overlay si es necesario ANTES de reproducir el audio
       if (nextAudio.showOverlay) {
         await this.showOverlay();
+        // Agregar pequeña pausa para que la animación de entrada se complete
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       await this.playAudio(nextAudio.path, nextAudio.showOverlay);

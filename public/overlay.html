@@ -13,14 +13,26 @@
         }
         
         #overlay-image {
-            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
             max-width: 100vw;
             max-height: 100vh;
             object-fit: contain;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 9999;
         }
         
         .show {
-            display: block !important;
+            transform: translate(-50%, -50%) scale(1) !important;
+            opacity: 1 !important;
+        }
+        
+        .hide {
+            transform: translate(-50%, -50%) scale(0.8) !important;
+            opacity: 0 !important;
         }
     </style>
 </head>
@@ -29,24 +41,52 @@
 
     <script>
         let isVisible = false;
+        let isTransitioning = false;
+        
+        // Función para mostrar la imagen con animación
+        function showImage() {
+            if (isVisible || isTransitioning) return;
+            
+            const image = document.getElementById('overlay-image');
+            isTransitioning = true;
+            
+            console.log('Showing image with animation');
+            image.classList.remove('hide');
+            image.classList.add('show');
+            
+            setTimeout(() => {
+                isTransitioning = false;
+                isVisible = true;
+            }, 300);
+        }
+        
+        // Función para ocultar la imagen con animación
+        function hideImage() {
+            if (!isVisible || isTransitioning) return;
+            
+            const image = document.getElementById('overlay-image');
+            isTransitioning = true;
+            
+            console.log('Hiding image with animation');
+            image.classList.remove('show');
+            image.classList.add('hide');
+            
+            setTimeout(() => {
+                isTransitioning = false;
+                isVisible = false;
+            }, 300);
+        }
         
         // Función para verificar el estado de visibilidad
         async function checkVisibility() {
             try {
-                console.log('Checking visibility...');
                 const response = await fetch('/api/overlay/status');
                 const data = await response.json();
-                console.log('API Response:', data);
                 
-                const image = document.getElementById('overlay-image');
-                if (data.visible && !isVisible) {
-                    console.log('Showing image');
-                    image.classList.add('show');
-                    isVisible = true;
-                } else if (!data.visible && isVisible) {
-                    console.log('Hiding image');
-                    image.classList.remove('show');
-                    isVisible = false;
+                if (data.visible && !isVisible && !isTransitioning) {
+                    showImage();
+                } else if (!data.visible && isVisible && !isTransitioning) {
+                    hideImage();
                 }
             } catch (error) {
                 console.error('Error checking visibility:', error);
@@ -55,12 +95,12 @@
         
         // Debug: mostrar estado inicial
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, starting visibility checks');
+            console.log('DOM loaded, overlay with animations ready');
             checkVisibility();
         });
         
-        // Verificar cada 500ms
-        setInterval(checkVisibility, 500);
+        // Verificar cada 200ms para mejor responsividad
+        setInterval(checkVisibility, 200);
         
         // Verificar inmediatamente al cargar
         checkVisibility();
