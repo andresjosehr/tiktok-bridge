@@ -209,7 +209,7 @@ class DinoChrome extends ServiceBase {
       logger.info(`${this.emoji} Chrome Dino game started!`);
       
       // Aplicar hack de inmortalidad y prevención de pausa
-      await this.page.evaluate(() => {
+      const debugInfo = await this.page.evaluate(() => {
         // Guardar la función original y reemplazarla con una función vacía
         if (typeof Runner !== 'undefined' && Runner.instance_) {
           Runner.prototype.gameOver = function(){};
@@ -239,9 +239,257 @@ class DinoChrome extends ServiceBase {
             configurable: true
           });
           
+          // INVESTIGACIÓN PROFUNDA del sistema de récord
+          console.log('🔍 DEEP DEBUGGING Runner and record system:');
+          console.log('Runner.instance_ keys:', Object.keys(Runner.instance_));
+          
+          // Investigar todas las propiedades relacionadas con récord
+          console.log('🔍 ALL Runner.instance_ properties:');
+          for (const [key, value] of Object.entries(Runner.instance_)) {
+            if (typeof value === 'number' || key.toLowerCase().includes('score') || key.toLowerCase().includes('high')) {
+              console.log(`  ${key}: ${value} (${typeof value})`);
+            }
+          }
+          
+          if (Runner.instance_.distanceMeter) {
+            console.log('🔍 distanceMeter ALL properties:');
+            for (const [key, value] of Object.entries(Runner.instance_.distanceMeter)) {
+              console.log(`  distanceMeter.${key}: ${value} (${typeof value})`);
+            }
+            
+            // Investigar el constructor/prototype para encontrar propiedades ocultas
+            console.log('🔍 distanceMeter prototype properties:');
+            const proto = Runner.instance_.distanceMeter.__proto__;
+            console.log('Prototype keys:', Object.getOwnPropertyNames(proto));
+            
+            // Buscar propiedades específicas que podrían controlar el récord
+            const possibleProps = ['maxScore', 'highScore', 'hi', 'record', 'best', 'top'];
+            possibleProps.forEach(prop => {
+              if (prop in Runner.instance_.distanceMeter) {
+                console.log(`  FOUND ${prop}: ${Runner.instance_.distanceMeter[prop]}`);
+              }
+            });
+          }
+          
+          // Investigar el objeto Runner en general
+          console.log('🔍 Runner (not instance) properties:');
+          if (typeof Runner === 'function') {
+            console.log('Runner constructor properties:', Object.getOwnPropertyNames(Runner));
+            if (Runner.prototype) {
+              console.log('Runner.prototype properties:', Object.getOwnPropertyNames(Runner.prototype));
+            }
+          }
+          
+          // Intentar acceder a localStorage de forma segura
+          console.log('🔍 Checking localStorage for dino game data:');
+          try {
+            if (typeof localStorage !== 'undefined' && localStorage) {
+              for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.toLowerCase().includes('dino') || key.toLowerCase().includes('runner') || key.toLowerCase().includes('high'))) {
+                  console.log(`localStorage[${key}] = ${localStorage.getItem(key)}`);
+                }
+              }
+            }
+          } catch (localStorageError) {
+            console.log('🔍 localStorage access denied:', localStorageError.message);
+            console.log('🔍 Using alternative storage method...');
+          }
+          
+          // SOLUCIÓN DIRECTA: Forzar inicialización del récord en el juego
+          try {
+            // Establecer un récord inicial de prueba para activar la visualización
+            const initialHighScore = 50; // Récord inicial para que aparezcan los números
+            
+            console.log('🏆 Forcing high score display initialization...');
+            
+            if (Runner.instance_.distanceMeter) {
+              // Método 1: Establecer directamente las propiedades con el formato correcto
+              Runner.instance_.distanceMeter.maxScore = initialHighScore;
+              // EL FORMATO CORRECTO: highScore debe ser un string formateado
+              const formattedScore = String(initialHighScore).padStart(5, '0');
+              Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+              
+              console.log(`🏆 Set highScore to: "${Runner.instance_.distanceMeter.highScore}"`);
+              
+              // Método 2: NO usar setHighScore ya que lo sobrescribe - usar solo después de interceptar
+              console.log(`🏆 Skipping setHighScore method to avoid override`);
+              console.log(`🏆 Current highScore after manual set: "${Runner.instance_.distanceMeter.highScore}"`);
+              
+              // Verificar que nuestro formato se mantuvo
+              if (!Runner.instance_.distanceMeter.highScore.includes('00050')) {
+                // Si se cambió, forzarlo de nuevo
+                Runner.instance_.distanceMeter.highScore = `HI 00050`;
+                console.log(`🏆 FORCED RESET to HI 00050`);
+              }
+              
+              // Método 3: Forzar re-renderizado llamando al método de actualización
+              if (typeof Runner.instance_.distanceMeter.update === 'function') {
+                Runner.instance_.distanceMeter.update(0, initialHighScore);
+                console.log('🏆 Forced distanceMeter update');
+              }
+              
+              // Método 4: Forzar el dibujado del récord
+              if (typeof Runner.instance_.distanceMeter.draw === 'function') {
+                Runner.instance_.distanceMeter.draw();
+                console.log('🏆 Forced distanceMeter draw');
+              }
+            }
+            
+            // Establecer en la instancia principal también
+            Runner.instance_.highestScore = initialHighScore;
+            
+            // Crear función para manejar récords dinámicamente
+            window.dinoHighScore = initialHighScore;
+            window.updateDinoRecord = function(inputScore) {
+              // Si no se proporciona score, usar la puntuación oficial actual
+              let newScore = inputScore;
+              if (newScore === undefined && Runner.instance_ && Runner.instance_.distanceMeter) {
+                newScore = Runner.instance_.distanceMeter.getActualDistance(Runner.instance_.distanceRan);
+              }
+              
+              if (newScore > window.dinoHighScore) {
+                window.dinoHighScore = newScore;
+                console.log(`🏆 NEW HIGH SCORE (official): ${newScore} points`);
+                
+                // Actualizar en todas las propiedades con formato correcto
+                if (Runner.instance_) {
+                  Runner.instance_.highestScore = newScore;
+                  
+                  if (Runner.instance_.distanceMeter) {
+                    Runner.instance_.distanceMeter.maxScore = newScore;
+                    
+                    // FORMATO CORRECTO: highScore como string formateado
+                    const formattedScore = String(newScore).padStart(5, '0');
+                    Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+                    
+                    console.log(`🏆 Updated highScore display to: "${Runner.instance_.distanceMeter.highScore}"`);
+                  }
+                }
+                return true;
+              }
+              return false;
+            };
+            
+            // Método 5: Interceptación COMPLETA del sistema de récord
+            if (Runner.instance_.distanceMeter) {
+              // Interceptar TODOS los métodos que podrían afectar el récord
+              const methods = ['update', 'draw', 'drawHighScore', 'setHighScore', 'getActualSize'];
+              
+              methods.forEach(methodName => {
+                if (typeof Runner.instance_.distanceMeter[methodName] === 'function') {
+                  const originalMethod = Runner.instance_.distanceMeter[methodName];
+                  Runner.instance_.distanceMeter[methodName] = function(...args) {
+                    // Para el método update, forzar nuestro récord
+                    if (methodName === 'update' && args.length >= 2) {
+                      const ourHighScore = window.dinoHighScore || initialHighScore;
+                      args[1] = Math.max(args[1] || 0, ourHighScore);
+                      console.log(`🔍 Intercepted ${methodName}: distance=${args[0]}, highScore=${args[1]}`);
+                    }
+                    
+                    // INTERCEPTAR setHighScore para evitar que cambie nuestro valor
+                    if (methodName === 'setHighScore') {
+                      const inputScore = args[0] || 0;
+                      const ourScore = window.dinoHighScore || initialHighScore;
+                      if (inputScore < ourScore) {
+                        console.log(`🚫 Blocked setHighScore(${inputScore}) - keeping our score: ${ourScore}`);
+                        // Mantener nuestro récord
+                        const formattedScore = String(ourScore).padStart(5, '0');
+                        this.highScore = `HI ${formattedScore}`;
+                        return; // No llamar al método original
+                      }
+                    }
+                    
+                    // Llamar al método original
+                    const result = originalMethod.apply(this, args);
+                    
+                    // Después de cualquier actualización, forzar nuestras propiedades
+                    if (methodName === 'update' || methodName === 'draw') {
+                      this.maxScore = Math.max(this.maxScore || 0, window.dinoHighScore || initialHighScore);
+                      // Mantener formato correcto del highScore
+                      const ourScore = window.dinoHighScore || initialHighScore;
+                      const formattedScore = String(ourScore).padStart(5, '0');
+                      this.highScore = `HI ${formattedScore}`;
+                    }
+                    
+                    return result;
+                  };
+                  console.log(`🏆 Intercepted ${methodName} method`);
+                }
+              });
+              
+              // Rastreador de información de récord que podemos acceder desde fuera
+              window.getRecordInfo = () => {
+                if (Runner.instance_ && Runner.instance_.distanceMeter) {
+                  // Usar el método oficial del juego para obtener la puntuación actual
+                  const officialScore = Runner.instance_.distanceMeter.getActualDistance(Runner.instance_.distanceRan);
+                  
+                  return {
+                    currentScore: officialScore, // Puntuación oficial del juego
+                    currentScoreOld: Math.floor((Runner.instance_.distanceRan || 0) / 10), // Nuestro cálculo anterior
+                    maxScore: Runner.instance_.distanceMeter.maxScore,
+                    highScore: Runner.instance_.distanceMeter.highScore,
+                    dinoHighScore: window.dinoHighScore,
+                    distance: Runner.instance_.distanceRan
+                  };
+                }
+                return null;
+              };
+              
+              // Forzar propiedades directamente cada frame con formato correcto
+              setInterval(() => {
+                if (Runner.instance_ && Runner.instance_.distanceMeter && window.dinoHighScore) {
+                  // Usar la puntuación oficial del juego
+                  const currentScore = Runner.instance_.distanceMeter.getActualDistance(Runner.instance_.distanceRan);
+                  
+                  if (currentScore > window.dinoHighScore) {
+                    window.dinoHighScore = currentScore;
+                    Runner.instance_.distanceMeter.maxScore = currentScore;
+                    
+                    // FORMATO CORRECTO para el récord
+                    const formattedScore = String(currentScore).padStart(5, '0');
+                    Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+                    
+                    console.log(`🏆 NEW OFFICIAL RECORD: ${currentScore} -> "${Runner.instance_.distanceMeter.highScore}"`);
+                  }
+                }
+              }, 100); // Cada 100ms
+            }
+            
+            console.log(`🏆 High score display initialized with ${initialHighScore} points`);
+            
+          } catch (error) {
+            console.log('🏆 Error initializing high score display:', error.message);
+          }
+          
           console.log('🦖 FOCUS LOSS PROTECTION ACTIVATED!');
+          
+          // Retornar información de debugging
+          return {
+            runnerKeys: Object.keys(Runner.instance_),
+            distanceMeterKeys: Runner.instance_.distanceMeter ? Object.keys(Runner.instance_.distanceMeter) : [],
+            distanceMeterProps: Runner.instance_.distanceMeter ? {
+              maxScore: Runner.instance_.distanceMeter.maxScore,
+              highScore: Runner.instance_.distanceMeter.highScore
+            } : {},
+            initialHighScore: window.dinoHighScore,
+            interceptedMethods: window.interceptedMethods || []
+          };
         }
+        return { error: 'Runner not available' };
       });
+      // Mostrar información de debugging
+      if (debugInfo) {
+        logger.info(`${this.emoji} DEBUG INFO:`);
+        logger.info(`${this.emoji} Runner keys: ${debugInfo.runnerKeys?.join(', ')}`);
+        logger.info(`${this.emoji} DistanceMeter keys: ${debugInfo.distanceMeterKeys?.join(', ')}`);
+        logger.info(`${this.emoji} DistanceMeter props: ${JSON.stringify(debugInfo.distanceMeterProps)}`);
+        logger.info(`${this.emoji} Initial high score: ${debugInfo.initialHighScore}`);
+        if (debugInfo.error) {
+          logger.error(`${this.emoji} Debug error: ${debugInfo.error}`);
+        }
+      }
+      
       logger.info(`${this.emoji} Immortality hack and focus protection applied - Dino is now invincible and won't pause!`);
       
       // Iniciar el auto-jumping
@@ -572,26 +820,63 @@ class DinoChrome extends ServiceBase {
           Runner.prototype.gameOver = function(){};
           console.log('🦖 IMMORTALITY ACTIVATED after restart!');
           
-          // Restaurar el récord máximo (intento seguro con fallback)
+          // Restaurar el récord usando nuestro sistema alternativo
           if (preservedHighScore > 0) {
             try {
-              // Intentar usar localStorage si está disponible
-              if (typeof localStorage !== 'undefined' && localStorage) {
-                localStorage.setItem('highScore', preservedHighScore.toString());
-                console.log(`🏆 Récord guardado en localStorage: ${preservedHighScore} puntos`);
+              // Usar nuestro sistema de almacenamiento alternativo
+              window.dinoHighScore = preservedHighScore;
+              
+              // Establecer el récord en todas las propiedades posibles
+              if (Runner.instance_) {
+                Runner.instance_.highestScore = preservedHighScore;
+                
+                if (Runner.instance_.distanceMeter) {
+                  Runner.instance_.distanceMeter.maxScore = preservedHighScore;
+                  
+                  // FORMATO CORRECTO: highScore como string formateado
+                  const formattedScore = String(preservedHighScore).padStart(5, '0');
+                  Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+                  
+                  console.log(`🏆 Récord restaurado: ${preservedHighScore} -> "${Runner.instance_.distanceMeter.highScore}"`);
+                }
+                
+                // Recrear la función de actualización de récord
+                window.updateDinoRecord = function(newScore) {
+                  if (newScore > window.dinoHighScore) {
+                    window.dinoHighScore = newScore;
+                    if (Runner.instance_ && Runner.instance_.distanceMeter) {
+                      Runner.instance_.distanceMeter.maxScore = newScore;
+                      
+                      // FORMATO CORRECTO: highScore como string formateado
+                      const formattedScore = String(newScore).padStart(5, '0');
+                      Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+                    }
+                    Runner.instance_.highestScore = newScore;
+                    console.log(`🏆 NUEVO RÉCORD: ${newScore} -> "${Runner.instance_.distanceMeter.highScore}"`);
+                    return true;
+                  }
+                  return false;
+                };
+                
+                // También interceptar el método de actualización para forzar visualización
+                if (Runner.instance_.distanceMeter && typeof Runner.instance_.distanceMeter.update === 'function') {
+                  const originalUpdate = Runner.instance_.distanceMeter.update;
+                  Runner.instance_.distanceMeter.update = function(distance, highScore) {
+                    const ourHighScore = window.dinoHighScore || preservedHighScore;
+                    const effectiveHighScore = Math.max(highScore || 0, ourHighScore);
+                    return originalUpdate.call(this, distance, effectiveHighScore);
+                  };
+                  console.log('🏆 Re-intercepted distanceMeter.update method after restart');
+                }
+                
+                console.log(`🏆 Récord completamente restaurado: ${preservedHighScore} puntos`);
               }
-            } catch (localStorageError) {
-              console.log(`🏆 localStorage no disponible, preservando récord internamente: ${preservedHighScore} puntos`);
-              // Fallback: guardar el high score directamente en una variable global
+            } catch (error) {
+              console.log(`🏆 Error restaurando récord: ${error.message}`);
+              // Fallback mínimo
               if (typeof window !== 'undefined') {
                 window.dinoHighScore = preservedHighScore;
               }
-            }
-            
-            // También actualizar la variable del juego si existe
-            if (Runner.instance_.distanceRan !== undefined) {
-              // Mostrar el récord preservado en la consola del navegador
-              console.log(`🏆 Récord preservado: ${preservedHighScore} puntos`);
             }
           }
         }
@@ -1579,12 +1864,45 @@ class DinoChrome extends ServiceBase {
         const gameStatus = await this.page.evaluate(() => {
           if (typeof Runner !== 'undefined' && Runner.instance_) {
             const game = Runner.instance_;
-            return {
+            
+            // Usar la puntuación oficial del juego
+            const currentScore = game.distanceMeter ? game.distanceMeter.getActualDistance(game.distanceRan) : 0;
+            let debugInfo = {
               playing: game.playing,
               crashed: game.crashed,
-              score: Math.floor(game.distanceRan / 10) || 0,
+              score: currentScore,
               speed: game.currentSpeed || 0
             };
+            
+            // Añadir información de debugging del récord
+            if (currentScore > 0 && currentScore <= 50) { // Solo mostrar en las primeras 50 puntos para no saturar
+              debugInfo.debug = {
+                highestScore: game.highestScore,
+                distanceMeterMaxScore: game.distanceMeter ? game.distanceMeter.maxScore : 'undefined',
+                distanceMeterHighScore: game.distanceMeter ? game.distanceMeter.highScore : 'undefined',
+                localStorage: localStorage.getItem('runner-hi') || localStorage.getItem('highScore') || 'not found'
+              };
+              
+              // Usar nuestro sistema de récord alternativo
+              try {
+                // Llamar a la función de actualización de récord
+                if (typeof window.updateDinoRecord === 'function') {
+                  const wasUpdated = window.updateDinoRecord(currentScore);
+                  if (wasUpdated) {
+                    debugInfo.recordUpdated = true;
+                  }
+                }
+                
+                // Reportar estado actual del récord
+                debugInfo.currentHighScore = window.dinoHighScore || 0;
+                debugInfo.maxScoreInMeter = game.distanceMeter ? game.distanceMeter.maxScore : 0;
+                
+              } catch (error) {
+                console.log(`Error updating record: ${error.message}`);
+              }
+            }
+            
+            return debugInfo;
           }
           return null;
         });
@@ -1597,14 +1915,38 @@ class DinoChrome extends ServiceBase {
           // Actualizar récord si es necesario
           if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
-            // logger.info(`${this.emoji} New session high score: ${this.highScore}`);
+            logger.info(`${this.emoji} New session high score: ${this.highScore}`);
+          }
+          
+          // Obtener información adicional del récord del juego cada 5 segundos
+          if (this.currentScore > 0 && this.currentScore % 10 === 0) {
+            this.page.evaluate(() => {
+              if (typeof window.getRecordInfo === 'function') {
+                const info = window.getRecordInfo();
+                console.log('🔍 RECORD INFO:', JSON.stringify(info));
+                return info;
+              }
+              return null;
+            }).then(recordInfo => {
+              if (recordInfo) {
+                logger.info(`${this.emoji} RECORD STATUS: Current=${recordInfo.currentScore}, maxScore=${recordInfo.maxScore}, highScore=${recordInfo.highScore}, dinoHighScore=${recordInfo.dinoHighScore}`);
+              }
+            }).catch(err => {
+              logger.debug(`${this.emoji} Error getting record info: ${err.message}`);
+            });
           }
           
           if (gameStatus.crashed && this.isGameRunning) {
             logger.info(`${this.emoji} Crash detected but immortality is active - Score: ${gameStatus.score}. Session Record: ${this.highScore}`);
             // Ya no reiniciamos porque el dino es inmortal
           } else if (gameStatus.playing) {
-            logger.debug(`${this.emoji} Game running - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}, Session Record: ${this.highScore}`);
+            // Mostrar debug info si está disponible
+            if (gameStatus.debug) {
+              logger.info(`${this.emoji} RECORD DEBUG - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}, Session Record: ${this.highScore}`);
+              logger.info(`${this.emoji} Game highestScore: ${gameStatus.debug.highestScore}, distanceMeter.maxScore: ${gameStatus.debug.distanceMeterMaxScore}, localStorage: ${gameStatus.debug.localStorage}`);
+            } else {
+              logger.debug(`${this.emoji} Game running - Score: ${gameStatus.score}, Speed: ${gameStatus.speed.toFixed(1)}, Session Record: ${this.highScore}`);
+            }
           }
         }
       } catch (error) {
