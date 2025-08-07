@@ -437,7 +437,12 @@ class DinoChrome extends ServiceBase {
               };
               
               // Forzar propiedades directamente cada frame con formato correcto
-              setInterval(() => {
+              // Limpiar interval anterior si existe
+              if (window.recordUpdateInterval) {
+                clearInterval(window.recordUpdateInterval);
+              }
+              
+              window.recordUpdateInterval = setInterval(() => {
                 if (Runner.instance_ && Runner.instance_.distanceMeter && window.dinoHighScore) {
                   // Usar la puntuación oficial del juego
                   const currentScore = Runner.instance_.distanceMeter.getActualDistance(Runner.instance_.distanceRan);
@@ -735,11 +740,11 @@ class DinoChrome extends ServiceBase {
       this.isRestartingGame = true;
       logger.info(`${this.emoji} Restarting Chrome Dino game by navigating to chrome://dino/...`);
       
-      // Guardar el récord actual antes de reiniciar
+      // Guardar el récord actual antes de reiniciar usando puntuación oficial
       const currentGameScore = await this.page.evaluate(() => {
-        if (typeof Runner !== 'undefined' && Runner.instance_) {
+        if (typeof Runner !== 'undefined' && Runner.instance_ && Runner.instance_.distanceMeter) {
           const game = Runner.instance_;
-          return Math.floor(game.distanceRan / 10) || 0;
+          return game.distanceMeter.getActualDistance(game.distanceRan) || 0;
         }
         return 0;
       });
@@ -762,6 +767,16 @@ class DinoChrome extends ServiceBase {
         clearInterval(this.jumpInterval);
         this.jumpInterval = null;
       }
+      
+      // Limpiar cualquier interval de actualización de récord que pueda estar corriendo
+      await this.page.evaluate(() => {
+        // Limpiar intervals de actualización de récord
+        if (window.recordUpdateInterval) {
+          clearInterval(window.recordUpdateInterval);
+          window.recordUpdateInterval = null;
+        }
+        console.log('🧹 Cleaned up record update intervals before restart');
+      });
       
       // Primero salir del modo offline temporalmente
       await this.page.setOfflineMode(false);
@@ -858,15 +873,65 @@ class DinoChrome extends ServiceBase {
                   return false;
                 };
                 
-                // También interceptar el método de actualización para forzar visualización
-                if (Runner.instance_.distanceMeter && typeof Runner.instance_.distanceMeter.update === 'function') {
-                  const originalUpdate = Runner.instance_.distanceMeter.update;
-                  Runner.instance_.distanceMeter.update = function(distance, highScore) {
-                    const ourHighScore = window.dinoHighScore || preservedHighScore;
-                    const effectiveHighScore = Math.max(highScore || 0, ourHighScore);
-                    return originalUpdate.call(this, distance, effectiveHighScore);
-                  };
-                  console.log('🏆 Re-intercepted distanceMeter.update method after restart');
+                // Recrear todo el sistema de interceptación después del reinicio
+                if (Runner.instance_.distanceMeter) {
+                  const methods = ['update', 'draw', 'drawHighScore', 'setHighScore'];
+                  
+                  methods.forEach(methodName => {
+                    if (typeof Runner.instance_.distanceMeter[methodName] === 'function') {
+                      const originalMethod = Runner.instance_.distanceMeter[methodName];
+                      Runner.instance_.distanceMeter[methodName] = function(...args) {
+                        // Para el método update, forzar nuestro récord
+                        if (methodName === 'update' && args.length >= 2) {
+                          const ourHighScore = window.dinoHighScore || preservedHighScore;
+                          args[1] = Math.max(args[1] || 0, ourHighScore);
+                        }
+                        
+                        // INTERCEPTAR setHighScore para evitar que cambie nuestro valor
+                        if (methodName === 'setHighScore') {
+                          const inputScore = args[0] || 0;
+                          const ourScore = window.dinoHighScore || preservedHighScore;
+                          if (inputScore < ourScore) {
+                            console.log(`🚫 Blocked setHighScore(${inputScore}) after restart - keeping: ${ourScore}`);
+                            const formattedScore = String(ourScore).padStart(5, '0');
+                            this.highScore = `HI ${formattedScore}`;
+                            return;
+                          }
+                        }
+                        
+                        const result = originalMethod.apply(this, args);
+                        
+                        // Mantener formato después de cualquier actualización
+                        if (methodName === 'update' || methodName === 'draw') {
+                          this.maxScore = Math.max(this.maxScore || 0, window.dinoHighScore || preservedHighScore);
+                          const ourScore = window.dinoHighScore || preservedHighScore;
+                          const formattedScore = String(ourScore).padStart(5, '0');
+                          this.highScore = `HI ${formattedScore}`;
+                        }
+                        
+                        return result;
+                      };
+                      console.log(`🏆 Re-intercepted ${methodName} method after restart`);
+                    }
+                  });
+                  
+                  // Recrear el interval de actualización de récord
+                  if (window.recordUpdateInterval) {
+                    clearInterval(window.recordUpdateInterval);
+                  }
+                  
+                  window.recordUpdateInterval = setInterval(() => {
+                    if (Runner.instance_ && Runner.instance_.distanceMeter && window.dinoHighScore) {
+                      const currentScore = Runner.instance_.distanceMeter.getActualDistance(Runner.instance_.distanceRan);
+                      if (currentScore > window.dinoHighScore) {
+                        window.dinoHighScore = currentScore;
+                        Runner.instance_.distanceMeter.maxScore = currentScore;
+                        const formattedScore = String(currentScore).padStart(5, '0');
+                        Runner.instance_.distanceMeter.highScore = `HI ${formattedScore}`;
+                        console.log(`🏆 RECORD UPDATED AFTER RESTART: ${currentScore}`);
+                      }
+                    }
+                  }, 100);
                 }
                 
                 console.log(`🏆 Récord completamente restaurado: ${preservedHighScore} puntos`);
