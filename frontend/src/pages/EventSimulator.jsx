@@ -26,7 +26,9 @@ const EventSimulator = () => {
     message: 'Hello from simulator!',
     giftName: 'Rose',
     giftCount: 1,
-    giftValue: 10
+    giftValue: 10,
+    giftId: 8913,
+    giftType: 1
   })
 
   // Auto mode interval
@@ -53,7 +55,16 @@ const EventSimulator = () => {
 
   const presetEvents = [
     { name: 'Popular Chat', type: 'chat', data: { message: 'This is amazing!' } },
-    { name: 'Rose Gift', type: 'gift', data: { giftName: 'Rose', giftCount: 5, giftValue: 50 } },
+    { name: 'Rose Gift', type: 'gift', data: { 
+      user: 'preset_user',
+      giftName: 'Rose', 
+      giftId: 8913,
+      repeatCount: 5, 
+      cost: 1,
+      giftType: 1,
+      repeatEnd: true,
+      timestamp: new Date().toISOString()
+    } },
     { name: 'New Follower', type: 'follow', data: { username: 'new_follower' } },
     { name: 'Like Spam', type: 'like', data: { count: 10 } },
     { name: 'Share Event', type: 'share', data: { platform: 'tiktok' } }
@@ -92,12 +103,14 @@ const EventSimulator = () => {
         }
       case 'gift':
         return {
-          user: { username: formData.username },
-          gift: {
-            name: formData.giftName,
-            count: formData.giftCount,
-            value: formData.giftValue
-          }
+          user: formData.username,
+          giftName: formData.giftName,
+          giftId: formData.giftId,
+          repeatCount: formData.giftCount,
+          cost: formData.giftValue,
+          giftType: formData.giftType,
+          repeatEnd: true,
+          timestamp: new Date().toISOString()
         }
       case 'follow':
         return {
@@ -135,12 +148,14 @@ const EventSimulator = () => {
         }
       case 'gift':
         return {
-          user: { username: randomUser },
-          gift: {
-            name: randomGifts[Math.floor(Math.random() * randomGifts.length)],
-            count: Math.floor(Math.random() * 5) + 1,
-            value: Math.floor(Math.random() * 100) + 10
-          }
+          user: randomUser,
+          giftName: randomGifts[Math.floor(Math.random() * randomGifts.length)],
+          giftId: Math.floor(Math.random() * 9999) + 1000,
+          repeatCount: Math.floor(Math.random() * 5) + 1,
+          cost: Math.floor(Math.random() * 100) + 10,
+          giftType: Math.floor(Math.random() * 3) + 1,
+          repeatEnd: true,
+          timestamp: new Date().toISOString()
         }
       default:
         return {
@@ -215,17 +230,28 @@ const EventSimulator = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Gift Name
                 </label>
-                <select
+                <input
+                  type="text"
                   value={formData.giftName}
                   onChange={(e) => setFormData({ ...formData, giftName: e.target.value })}
                   className="input"
-                >
-                  <option value="Rose">Rose</option>
-                  <option value="Heart">Heart</option>
-                  <option value="Diamond">Diamond</option>
-                  <option value="Crown">Crown</option>
-                </select>
+                  placeholder="Enter gift name"
+                />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gift ID
+                </label>
+                <input
+                  type="number"
+                  value={formData.giftId}
+                  onChange={(e) => setFormData({ ...formData, giftId: parseInt(e.target.value) })}
+                  className="input"
+                  placeholder="Gift ID"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Count
@@ -239,18 +265,31 @@ const EventSimulator = () => {
                   max="99"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Value (coins)
-              </label>
-              <input
-                type="number"
-                value={formData.giftValue}
-                onChange={(e) => setFormData({ ...formData, giftValue: parseInt(e.target.value) })}
-                className="input"
-                min="1"
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cost (coins)
+                </label>
+                <input
+                  type="number"
+                  value={formData.giftValue}
+                  onChange={(e) => setFormData({ ...formData, giftValue: parseInt(e.target.value) })}
+                  className="input"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Gift Type
+                </label>
+                <input
+                  type="number"
+                  value={formData.giftType}
+                  onChange={(e) => setFormData({ ...formData, giftType: parseInt(e.target.value) })}
+                  className="input"
+                  min="1"
+                  max="5"
+                />
+              </div>
             </div>
           </div>
         )
