@@ -1,6 +1,6 @@
 # 🎮 TikTok Live Bridge - Plataforma Modular de Eventos
 
-Una plataforma modular Node.js que conecta streams de TikTok Live con cualquier servidor de juego o servicio, diseñada con arquitectura modular y sistema de colas inteligente con prioridades.
+Una plataforma modular Node.js que conecta streams de TikTok Live con cualquier servidor de juego o servicio, diseñada con arquitectura modular y sistema de colas inteligente con prioridades. Incluye integración con múltiples juegos (Garry's Mod, Chrome Dino, GTAV/FiveM), overlay interactivo para streams, y sistema avanzado de audio con reproducción multiplataforma.
 
 ## 🌟 Características Principales
 
@@ -39,10 +39,19 @@ Una plataforma modular Node.js que conecta streams de TikTok Live con cualquier 
 - **Limpieza automática** de eventos y archivos temporales
 
 ### 🎮 Servicios de Juegos Soportados
-- **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real (implementado)
-- **GTAV/FiveM**: Preparado para integración futura
-- **Arquitectura extensible** para agregar cualquier juego o servicio
-- **Reconexión automática** cuando se pierde la conexión
+- **Garry's Mod**: WebSocket/HTTP para comunicación en tiempo real con TTS modular
+- **Chrome Dino Game**: Automatización completa con sistema de audio avanzado
+  - Sistema de récord persistente con puntuación oficial
+  - Reproducción de audio multiplataforma (Windows/Linux/macOS)
+  - Detección inteligente de obstáculos y auto-jump
+  - Modo inmortalidad y reinicio automático con gifts especiales
+- **GTAV/FiveM**: Template preparado para integración
+- **Sistema de Overlay**: Visualización en tiempo real para streams
+  - Animaciones de gifts y eventos
+  - Modo TEST para desarrollo
+  - Integración con OBS/Streamlabs
+- **Arquitectura extensible** con `ServiceBase` para agregar cualquier juego
+- **Reconexión automática** y monitoreo de salud
 - **Formato de mensajes estandarizado** entre servicios
 
 ### 🌐 Frontend React
@@ -70,8 +79,14 @@ Una plataforma modular Node.js que conecta streams de TikTok Live con cualquier 
 ### 1. Clonar e Instalar Dependencias
 ```bash
 git clone <tu-repo>
-cd garrys-tiktok
+cd tiktok-bridge
 npm install
+
+# Instalar dependencias del frontend
+npm run frontend:install
+
+# (Opcional) Para audio en Windows
+./install-windows-audio.bat
 ```
 
 ### 2. Configurar Base de Datos
@@ -83,7 +98,7 @@ cp .env.example .env
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=tu_password
-DB_DATABASE=garrys_tiktok
+DB_DATABASE=tiktok_bridge
 ```
 
 ### 3. Ejecutar Migraciones
@@ -106,7 +121,7 @@ GMOD_WS_PORT=27015
 GMOD_HTTP_PORT=27016
 
 # Habilitar servicios específicos
-QUEUE_ENABLED_PROCESSORS=gmod,gtav
+QUEUE_ENABLED_PROCESSORS=gmod,dinochrome,gtav
 ```
 
 ## 🎯 Uso
@@ -168,7 +183,7 @@ npm run frontend:build
 ## 🏗️ Arquitectura
 
 ```
-garrys-tiktok/
+tiktok-bridge/
 ├── src/
 │   ├── app.js                          # Aplicación Express principal
 │   ├── config/
@@ -179,11 +194,21 @@ garrys-tiktok/
 │   │   ├── orm/                        # ORM y modelos
 │   │   └── migrations/                 # Archivos de migración
 │   ├── services/
+│   │   ├── ServiceBase.js              # Clase base para todos los servicios
 │   │   ├── eventManager.js             # Gestor de eventos interno
 │   │   ├── tiktok/
 │   │   │   └── tiktokService.js        # Servicio TikTok Live
 │   │   ├── gmod/
-│   │   │   └── gmodService.js          # Comunicación GMod
+│   │   │   ├── gmodService.js          # Comunicación GMod
+│   │   │   ├── gmodServiceInstance.js  # Instancia específica GMod
+│   │   │   └── gmod-tts-modular.json   # Configuración TTS
+│   │   ├── dinochrome/
+│   │   │   ├── DinoChrome.js           # Automatización Chrome Dino
+│   │   │   └── audios/                 # Archivos de audio para eventos
+│   │   │       ├── rose/               # Audios para Rose gifts
+│   │   │       └── rosa/               # Audios para Rosa/GG gifts
+│   │   ├── gtav/
+│   │   │   └── GTAVService.js          # Template GTAV/FiveM
 │   │   └── external/                   # Servicios externos
 │   ├── queue/
 │   │   ├── queueManager.js             # Gestor de cola
@@ -198,6 +223,12 @@ garrys-tiktok/
 │   │   ├── hooks/                      # React hooks
 │   │   └── services/                   # Servicios API
 │   └── public/
+├── public/
+│   ├── overlay.html                   # Overlay para streams
+│   ├── control.html                   # Panel de control overlay
+│   └── assets/                        # Assets estáticos
+├── audio_cache/                        # Cache de TTS
+├── temp_audio_gmod/                    # Audio temporal combinado
 └── logs/                               # Archivos de log
 ```
 
@@ -205,19 +236,29 @@ garrys-tiktok/
 
 ### Estados del Sistema
 - `GET /health` - Estado general del servidor
-- `GET /status` - Estado detallado (TikTok, Cola, GMod)
-- `GET /api/queue/status` - Estado de la cola
-- `GET /api/queue/stats` - Estadísticas detalladas
+- `GET /status` - Estado detallado (TikTok, Cola, Servicios activos)
+- `GET /api/queue/status` - Estado de la cola en tiempo real
+- `GET /api/queue/stats` - Estadísticas detalladas y métricas
 
 ### Gestión de Cola
-- `POST /api/queue/clear` - Limpiar cola
-- `POST /api/queue/optimize` - Optimizar cola
+- `POST /api/queue/clear` - Limpiar cola completada/fallida
+- `POST /api/queue/optimize` - Optimizar cola por prioridades
+- `POST /api/queue/process` - Procesar evento específico
 - `GET /api/logs` - Logs de eventos recientes
 
-### Simulación (Desarrollo)
+### Simulación y Testing
 - `POST /api/simulate/chat` - Simular mensaje de chat
-- `POST /api/simulate/gift` - Simular donación
-- `POST /api/simulate/follow` - Simular seguidor
+- `POST /api/simulate/gift` - Simular donación/gift con repeat_end
+- `POST /api/simulate/follow` - Simular nuevo seguidor
+- `POST /api/simulate/share` - Simular compartir stream
+- `POST /api/simulate/like` - Simular likes
+
+### Overlay y Assets
+- `GET /overlay` - Página de overlay para OBS
+- `GET /control` - Panel de control del overlay
+- `GET /api/overlay/events` - SSE de eventos en tiempo real
+- `POST /api/overlay/test` - Enviar evento de prueba al overlay
+- `GET /api/assets/*` - Servir archivos de audio/imágenes
 
 ## 🎮 Integración con Servicios de Juegos
 
@@ -256,9 +297,9 @@ NODE_ENV=production
 
 # Base de Datos
 DB_HOST=localhost
-DB_USER=garrys_tiktok
+DB_USER=tiktok_bridge
 DB_PASSWORD=password_seguro
-DB_DATABASE=garrys_tiktok
+DB_DATABASE=tiktok_bridge
 
 # Cola
 QUEUE_MAX_SIZE=1000
@@ -284,6 +325,14 @@ GMOD_WS_PORT=27015
 GMOD_HTTP_PORT=27016
 GMOD_ENABLED=true
 GMOD_RECONNECT_INTERVAL=30000
+
+# DinoChrome Service
+DINOCHROME_ENABLED=true
+DINOCHROME_PROCESS_ONLY_FINAL_GIFTS=true
+DINOCHROME_AUDIO_VOLUME=100
+
+# GTAV/FiveM (Template)
+GTAV_ENABLED=false
 
 # Logging
 LOG_LEVEL=info
@@ -376,7 +425,7 @@ npm run migrate
 3. Integrar en `eventManager.js`
 4. Actualizar frontend si es necesario
 
-### Agregar Nuevo Servicio (ej. FiveM, CS2, Minecraft)
+### Agregar Nuevo Servicio (ej. FiveM, CS2, Minecraft, Roblox)
 1. Crear nuevo servicio extendiendo `ServiceBase` en `src/services/nuevo_juego/`
 2. Implementar todos los métodos requeridos:
    - `handleTikTokChat`, `handleTikTokGift`, `handleTikTokFollow`
@@ -417,6 +466,46 @@ grep "WARN" logs/app.log
 - **Gráficos de rendimiento** históricos
 - **Alertas** cuando la cola está llena
 - **Simulador de eventos** para testing
+
+## 🎮 DinoChrome Service
+
+### Características Especiales
+- **Sistema de Récord Persistente**: Guarda y muestra el récord máximo
+- **Audio Multiplataforma**: Soporte para Windows, Linux, macOS
+- **Detección de Obstáculos**: Análisis inteligente con anchura variable
+- **Modo Inmortalidad**: Activado con gifts especiales
+- **Reinicio Automático**: Con gifts de Rosa/GG (10+ monedas)
+
+### Configuración de Audio
+```bash
+# Windows: Instalar FFmpeg para mejor rendimiento
+./install-windows-audio.bat
+
+# Linux/WSL: FFmpeg requerido
+sudo apt-get install ffmpeg
+
+# macOS: Usa afplay nativo
+```
+
+### Estructura de Audios
+```
+src/services/dinochrome/audios/
+├── rose/           # 12 audios para Rose gifts (1 moneda)
+└── rosa/           # 30 audios para Rosa/GG gifts (10+ monedas)
+```
+
+## 🎨 Sistema de Overlay
+
+### Configuración para Streams
+1. Abrir `/overlay` en navegador
+2. Agregar como Browser Source en OBS/Streamlabs
+3. Configurar tamaño: 1920x1080 (o resolución del stream)
+4. Activar transparencia en OBS
+
+### Panel de Control
+- Acceder a `/control` para enviar eventos de prueba
+- Modo TEST disponible para desarrollo
+- Animaciones personalizables para cada tipo de evento
 
 ## 🚨 Solución de Problemas
 

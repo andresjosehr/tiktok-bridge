@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a TikTok Live events bridge - a sophisticated modular Node.js platform that connects TikTok Live streams to any game server or service with intelligent event queuing, priority management, and advanced TTS capabilities. The system captures TikTok Live events (chat, gifts, follows, etc.) and forwards them to game servers via WebSocket/HTTP with modular TTS, AI integration, and comprehensive caching.
+This is a TikTok Live events bridge - a sophisticated modular Node.js platform that connects TikTok Live streams to any game server or service with intelligent event queuing, priority management, and advanced TTS capabilities. The system captures TikTok Live events (chat, gifts, follows, etc.) and forwards them to game servers via WebSocket/HTTP with modular TTS, AI integration, comprehensive caching, and includes real-time overlay support for streaming platforms.
 
 ## Key Architecture Components
 
@@ -23,8 +23,10 @@ This is a TikTok Live events bridge - a sophisticated modular Node.js platform t
 
 ### Frontend (React + Vite)
 - **Real-time Dashboard**: Monitor queue status, system health, and event flow
-- **Event Simulator**: Test TikTok events without live stream
+- **Event Simulator**: Test TikTok events without live stream (with repeat_end support for gift streaks)
 - **Queue Monitor**: Visual metrics and queue optimization controls
+- **Overlay System**: Browser source for OBS/Streamlabs with animated events
+- **Control Panel**: Testing interface for overlay events
 
 ### Event Priority System
 The queue manager uses configurable priorities where higher numbers = higher priority:
@@ -144,13 +146,17 @@ The system has fully implemented:
 - `src/app.js`: Main Express application entry point
 - `src/services/`: Core business logic with modular architecture
   - `ServiceBase.js`: Abstract base class defining interface for all game services
-  - `eventManager.js`: Central event processing and distribution
+  - `eventManager.js`: Central event processing and distribution with priority management
   - `tiktok/tiktokService.js`: TikTok Live connection with auto-reconnect
   - `gmod/`: Garry's Mod integration
     - `gmodService.js`: Main GMod service implementation
     - `gmodServiceInstance.js`: Specific GMod instance handler
     - `gmod-tts-modular.json`: TTS message configuration
   - `gtav/GTAVService.js`: GTAV/FiveM service template
+  - `dinochrome/`: Chrome Dino game automation
+    - `DinoChrome.js`: Main service with obstacle detection and game control
+    - `audios/rose/`: 12 audio files for Rose gifts (1 coin)
+    - `audios/rosa/`: 30 audio files for Rosa/GG gifts (10+ coins)
   - `external/`: External service integrations
     - `aiService.js`: Multi-provider AI integration
     - `ttsService.js`: Multi-provider TTS integration
@@ -159,15 +165,25 @@ The system has fully implemented:
       - `modularTTSService.js`: Core modular TTS service
       - `messageComposer.js`: Dynamic message composition
       - `ttsCache.js`: Intelligent audio caching
+- `src/api/routes/`: REST API endpoints
+  - `assets.js`: Static file serving for audio and images
+  - `overlay.js`: Overlay event streaming and control
+  - `queue.js`: Queue management endpoints
+  - `system.js`: System status and health checks
+  - `tiktok.js`: TikTok simulation and control
 - `src/queue/`: Advanced queue management
-  - `queueManager.js`: Priority-based queue with filtering
-  - `queueProcessor.js`: Multi-service processor with switching
+  - `queueManager.js`: Priority-based queue with filtering and service-specific priorities
+  - `queueProcessor.js`: Multi-service processor with runtime switching
 - `src/database/`: Dual persistence layer
   - `orm/`: Custom ORM with type safety
   - `models/`: Legacy Sequelize models
-  - `migrations/`: Laravel-style migrations
+  - `migrations/`: Laravel-style migrations (including repeat_end and service_id columns)
 - `src/cli/`: Comprehensive CLI tools
 - `frontend/src/`: React dashboard with real-time monitoring
+- `public/`: Static HTML files
+  - `overlay.html`: Stream overlay with animations
+  - `control.html`: Overlay control panel
+  - `assets/`: Static images and resources
 - `audio_cache/`: TTS cache with parts/ and usernames/ subdirectories
 - `temp_audio_gmod/`: Temporary combined audio files
 - `logs/`: Structured application logs
@@ -215,9 +231,13 @@ The system uses a sophisticated modular service architecture:
   - Custom addon support included in `garrys_mod_addons/`
 - **GTAV Service**: Template for GTA V/FiveM integration (extensible)
 - **DinoChrome Service**: Chrome Dino game automation with TikTok integration
-  - Cross-platform audio playback for gift/donation events
-  - Intelligent obstacle detection and auto-jumping
-  - Game state monitoring and immortality features
+  - Cross-platform audio playback for gift/donation events (Windows/Linux/macOS)
+  - Intelligent obstacle detection with variable width analysis
+  - Advanced game state monitoring with persistent high score system
+  - Immortality mode activation via special gifts
+  - Automatic game restart with Rosa/GG gifts (10+ coins)
+  - Sequential audio playback system with 42 unique sound files
+  - Process only final gifts in streaks to avoid audio spam
 
 ### Service Implementation Requirements:
 
@@ -308,58 +328,77 @@ All services should handle the standardized message format:
 
 ## DinoChrome Audio System
 
-El servicio DinoChrome incluye un sistema de audio multiplataforma que reproduce sonidos especiales para eventos de regalo:
+The DinoChrome service includes a cross-platform audio system that plays special sounds for gift events:
 
-### Compatibilidad de Plataformas
+### Platform Compatibility
 
 **Linux/WSL:**
-- Usa `ffplay` (incluido con FFmpeg)
-- Configuración optimizada: `-nodisp -autoexit -loglevel panic -volume 100`
+- Uses `ffplay` (included with FFmpeg)
+- Optimized configuration: `-nodisp -autoexit -loglevel panic -volume 100`
 
 **macOS:**
-- Usa `afplay` (incluido nativamente)
+- Uses `afplay` (included natively)
 
 **Windows:**
-- **Opción 1**: `ffplay` (si FFmpeg está instalado)
-- **Opción 2**: `wmplayer` (Windows Media Player)
-- **Opción 3**: PowerShell con `System.Windows.Media.MediaPlayer`
+- **Option 1**: `ffplay` (if FFmpeg is installed)
+- **Option 2**: `wmplayer` (Windows Media Player)
+- **Option 3**: PowerShell with `System.Windows.Media.MediaPlayer`
 
-### Instalación de Audio en Windows
+### Audio Installation on Windows
 
-Para mejor rendimiento en Windows, instala FFmpeg:
+For better performance on Windows, install FFmpeg:
 
 ```batch
-# Ejecutar script de instalación
+# Run installation script
 install-windows-audio.bat
 
-# O manualmente con Chocolatey
+# Or manually with Chocolatey
 choco install ffmpeg -y
 
-# O con Scoop
+# Or with Scoop
 scoop install ffmpeg
 ```
 
-### Estructura de Audios
+### Audio Structure
 
 ```
 src/services/dinochrome/audios/
-├── rose/           # Audios para gifts de Rose (1 moneda)
-│   ├── audio1.mp3
-│   └── audio2.mp3
-└── rosa/           # Audios para gifts de Rosa/GG (10+ monedas)
-    ├── audio1.mp3
-    └── audio2.mp3
+├── rose/           # Audio files for Rose gifts (1 coin)
+│   ├── rose-1.mp3 through rose-12.mp3
+└── rosa/           # Audio files for Rosa/GG gifts (10+ coins)
+    ├── rosa-1.mp3 through rosa-30.mp3
 ```
 
-### Configuración de Events
+### Event Configuration
 
-- **Rose Gift (1 moneda)**: Reproduce audio aleatorio de `audios/rose/`
-- **Rosa/GG Gift (10+ monedas)**: Reproduce audio + reinicia el juego
+- **Rose Gift (1 coin)**: Plays random audio from `audios/rose/`
+- **Rosa/GG Gift (10+ coins)**: Plays audio + restarts the game
+- **Gift Streaks**: Only processes final gift in streak (configurable via `setProcessOnlyFinalGifts`)
+- **High Score**: Persistent storage with automatic recovery on game restart
 
 ### Troubleshooting
 
-Si el audio no funciona en Windows:
-1. Verifica los logs para ver qué reproductor se detectó
-2. Instala FFmpeg para mejor compatibilidad
-3. Asegúrate de que los archivos MP3 existan en las carpetas correctas
-4. Verifica permisos de ejecución de PowerShell si es necesario
+If audio doesn't work on Windows:
+1. Check logs to see which player was detected
+2. Install FFmpeg for better compatibility
+3. Ensure MP3 files exist in the correct folders
+4. Verify PowerShell execution permissions if necessary
+
+## Overlay System
+
+### Features
+- **Real-time Events**: SSE connection for live event streaming
+- **Gift Animations**: Special animations for Rose and Rosa/GG gifts
+- **Test Mode**: Development mode for testing without live stream
+- **OBS Integration**: Browser source compatible with transparency
+
+### Setup
+1. Navigate to `/overlay` in browser
+2. Add as Browser Source in OBS/Streamlabs (1920x1080)
+3. Enable transparency in source settings
+4. Use `/control` panel for testing events
+
+### API Endpoints
+- `GET /api/overlay/events`: SSE stream of TikTok events
+- `POST /api/overlay/test`: Send test events to overlay
+- `GET /api/assets/*`: Serve static assets for overlay
