@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__browser__puppeteer_navigate",
+      "Bash(npm install:*)",
+      "mcp__browser__puppeteer_screenshot",
+      "mcp__browser__puppeteer_evaluate"
+    ],
+    "deny": []
+  }
+}

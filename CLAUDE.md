@@ -15,6 +15,7 @@ This is a TikTok Live events bridge - a sophisticated modular Node.js platform t
 - **TikTok Service**: Handles TikTok Live connection using `tiktok-live-connector` with auto-reconnect
 - **Game Services**: GMod service (active), GTAV service (prepared), extensible for more
 - **Migration System**: Laravel-style database migrations with up/down methods
+- **Seeder System**: Database seeding system for test data and initial records
 - **ORM Layer**: Dual system - Custom ORM + Sequelize for maximum flexibility
 - **TTS System**: Advanced modular TTS with cache, message composition, and audio combining
 - **AI Integration**: Multiple providers (OpenAI, Anthropic, Google, Local models)
@@ -55,6 +56,14 @@ npm run migrate:rollback      # Rollback last batch
 npm run migrate:fresh         # Drop all tables and re-run migrations
 npm run make:migration <name> # Create new migration file
 
+# Database Seeding
+npm run seed                  # Run pending seeders
+npm run seed:status           # Check seeder status
+npm run seed:rollback         # Rollback last seeder batch
+npm run seed:rollback-all     # Rollback all seeders
+npm run seed:fresh            # Run all seeders (ignores executed status)
+npm run make:seeder <name>    # Create new seeder file
+
 # Queue Management
 npm run queue:work            # Start queue processor
 npm run queue:clear           # Clear completed/failed events
@@ -75,9 +84,10 @@ npm run frontend:preview      # Preview production build
 
 ## Database Configuration
 
-The system uses MySQL with a custom migration system. Database config is in `src/config/config.js` with environment variables:
+The system uses MySQL with custom migration and seeder systems. Database config is in `src/config/config.js` with environment variables:
 - `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`
 - Migrations are in `src/database/migrations/` with timestamp prefixes
+- Seeders are in `src/database/seeders/` with timestamp prefixes
 - Models are in both `src/database/models/` and `src/database/orm/models/`
 
 ## Environment Configuration
