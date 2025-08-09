@@ -2,6 +2,7 @@ const { WebcastPushConnection } = require('tiktok-live-connector');
 const eventManager = require('../eventManager');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
+const LiveSessionManager = require('../liveSessionManager');
 
 class TikTokService {
   constructor() {
@@ -11,6 +12,8 @@ class TikTokService {
     this.maxReconnectAttempts = config.tiktok.maxReconnectAttempts || 5;
     this.connectedAt = null;
     this.lastConnectedAt = null;
+    this.liveSessionManager = new LiveSessionManager();
+    this.currentUsername = null;
   }
 
   async initialize() {
@@ -49,6 +52,9 @@ class TikTokService {
         logger.warn('No TikTok session ID provided. You may need to set TIKTOK_SESSION_ID environment variable for stable connections');
       }
 
+      // Set username before connecting so it's available in event handlers
+      this.currentUsername = username;
+      
       this.connection = new WebcastPushConnection(username, connectionOptions);
 
       this.setupEventHandlers();
@@ -68,15 +74,35 @@ class TikTokService {
   }
 
   setupEventHandlers() {
-    this.connection.on('connected', (state) => {
+    this.connection.on('connected', async (state) => {
       logger.info(`Connected to TikTok live stream. Room ID: ${state.roomId}`);
+      
+      // Start live session
+      try {
+        const queueProcessorManager = require('../../queue/queueProcessor');
+        const serviceId = queueProcessorManager.getActiveServiceType();
+        await this.liveSessionManager.startSession(this.currentUsername, serviceId);
+        logger.info(`Live session started for ${this.currentUsername} with service ${serviceId}`);
+      } catch (error) {
+        logger.error('Failed to start live session:', error);
+      }
+      
       eventManager.emit('tiktok:connected', { roomId: state.roomId });
     });
 
-    this.connection.on('disconnected', () => {
+    this.connection.on('disconnected', async () => {
       logger.warn('Disconnected from TikTok live stream');
       this._isConnected = false;
       this.connectedAt = null;
+      
+      // End live session
+      try {
+        await this.liveSessionManager.endSession();
+        logger.info('Live session ended due to TikTok disconnection');
+      } catch (error) {
+        logger.error('Failed to end live session:', error);
+      }
+      
       eventManager.emit('tiktok:disconnected');
     });
 
@@ -87,6 +113,10 @@ class TikTokService {
 
     this.connection.on('chat', (data) => {
       logger.debug(`Chat message: ${data.comment} by ${data.uniqueId}`);
+      
+      // Track chat event in session
+      this.liveSessionManager.trackEvent('chat');
+      
       eventManager.emit('tiktok:chat', {
         user: data.uniqueId,
         message: data.comment,
@@ -111,6 +141,9 @@ class TikTokService {
       
       logger.debug(logMessage);
       
+      // Track gift event in session
+      this.liveSessionManager.trackEvent('gift');
+      
       // SIEMPRE emitir el evento - que cada servicio decida si procesarlo
       eventManager.emit('tiktok:gift', {
         user: data.uniqueId,
@@ -126,6 +159,10 @@ class TikTokService {
 
     this.connection.on('follow', (data) => {
       logger.debug(`New follower: ${data.uniqueId}`);
+      
+      // Track follow event in session
+      this.liveSessionManager.trackEvent('follow');
+      
       eventManager.emit('tiktok:follow', {
         user: data.uniqueId,
         timestamp: new Date().toISOString()
@@ -212,6 +249,10 @@ class TikTokService {
 
   getConnectionAttempts() {
     return this.reconnectAttempts;
+  }
+
+  getLiveSessionManager() {
+    return this.liveSessionManager;
   }
 
   getUptime() {

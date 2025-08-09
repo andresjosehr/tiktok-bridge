@@ -17,6 +17,7 @@ class QueueProcessor {
     this.jobNotifier = new EventEmitter();
     this.waitingForJob = false;
     this.activeService = activeService;
+    this.liveSessionManager = null; // Will be set externally
     this.setupEventHandlers();
     this.setupServicePriorities();
   }
@@ -52,6 +53,17 @@ class QueueProcessor {
         logger.info(`${this.name} registered gift-specific priorities for service ${serviceId}`);
       }
     }
+  }
+
+  setLiveSessionManager(sessionManager) {
+    this.liveSessionManager = sessionManager;
+  }
+
+  async getActiveSessionId() {
+    if (this.liveSessionManager) {
+      return await this.liveSessionManager.getSessionId();
+    }
+    return null;
   }
 
   async start() {
@@ -185,7 +197,8 @@ class QueueProcessor {
       await job.markAsCompleted();
       
       const EventLog = orm.getModel('EventLog');
-      await EventLog.createLog(job.id, job.event_type, job.event_data, 'success', null, executionTime, this.activeService.serviceName);
+      const sessionId = await this.getActiveSessionId();
+      await EventLog.createLog(sessionId, job.event_type, job.event_data, 'success', null, executionTime);
       
       logger.debug(`${this.name} job ${job.id} completed successfully in ${executionTime}ms`);
       
@@ -199,7 +212,8 @@ class QueueProcessor {
         await job.markAsCompleted();
         
         const EventLog = orm.getModel('EventLog');
-        await EventLog.createLog(job.id, job.event_type, job.event_data, 'skipped', error.message, executionTime, this.activeService.serviceName);
+        const sessionId = await this.getActiveSessionId();
+        await EventLog.createLog(sessionId, job.event_type, job.event_data, 'skipped', error.message, executionTime);
       } else {
         logger.error(`${this.name} job ${job.id} failed:`, error);
         
@@ -207,7 +221,8 @@ class QueueProcessor {
         await job.markAsFailed(retryDelay);
         
         const EventLog = orm.getModel('EventLog');
-        await EventLog.createLog(job.id, job.event_type, job.event_data, 'failed', error.message, executionTime, this.activeService.serviceName);
+        const sessionId = await this.getActiveSessionId();
+        await EventLog.createLog(sessionId, job.event_type, job.event_data, 'failed', error.message, executionTime);
       }
     }
   }

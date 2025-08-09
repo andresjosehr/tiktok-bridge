@@ -1980,7 +1980,6 @@ class DinoChrome extends ServiceBase {
           // Actualizar récord si es necesario
           if (this.currentScore > this.highScore) {
             this.highScore = this.currentScore;
-            logger.info(`${this.emoji} New session high score: ${this.highScore}`);
           }
           
           // Obtener información adicional del récord del juego cada 5 segundos

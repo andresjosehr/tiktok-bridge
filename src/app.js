@@ -79,6 +79,16 @@ const startServer = async () => {
     logger.info('Starting queue processor...');
     await queueProcessor.start();
     
+    // Connect live session manager to queue processor
+    logger.info('Connecting live session manager to queue processor...');
+    const sessionManager = tiktokService.getLiveSessionManager();
+    queueProcessor.queueProcessor.setLiveSessionManager(sessionManager);
+    
+    // Check for existing active session on startup
+    if (config.tiktok.username) {
+      await sessionManager.initializeFromExistingSession(config.tiktok.username);
+    }
+    
     const server = app.listen(config.port, () => {
       logger.info(`Server running on port ${config.port}`);
     });

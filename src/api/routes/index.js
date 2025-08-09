@@ -8,6 +8,7 @@ const systemRoutes = require('./system');
 const configRoutes = require('./config');
 const assetsRoutes = require('./assets');
 const overlayRoutes = require('./overlay');
+const sessionsRoutes = require('./sessions');
 
 // Mount routes
 router.use('/queue', queueRoutes);
@@ -16,6 +17,7 @@ router.use('/system', systemRoutes);
 router.use('/config', configRoutes);
 router.use('/assets', assetsRoutes);
 router.use('/overlay', overlayRoutes);
+router.use('/sessions', sessionsRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -28,7 +30,8 @@ router.get('/', (req, res) => {
       system: '/api/system',
       config: '/api/config',
       assets: '/api/assets',
-      overlay: '/api/overlay'
+      overlay: '/api/overlay',
+      sessions: '/api/sessions'
     },
     documentation: {
       queue: [
@@ -78,6 +81,13 @@ router.get('/', (req, res) => {
         'POST /api/overlay/show - Show overlay',
         'POST /api/overlay/hide - Hide overlay',
         'POST /api/overlay/toggle - Toggle overlay visibility'
+      ],
+      sessions: [
+        'GET /api/sessions/current - Get current active session',
+        'GET /api/sessions/current/stats - Get current session statistics',
+        'GET /api/sessions/recent - Get recent sessions',
+        'POST /api/sessions/current/end - End current session',
+        'GET /api/sessions/:sessionId - Get session by ID'
       ]
     },
     timestamp: new Date().toISOString()

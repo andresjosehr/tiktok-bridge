@@ -7,11 +7,11 @@ module.exports = (sequelize) => {
       primaryKey: true,
       autoIncrement: true
     },
-    queue_id: {
+    session_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
       references: {
-        model: 'event_queue',
+        model: 'live_sessions',
         key: 'id'
       },
       onDelete: 'SET NULL'
@@ -46,13 +46,6 @@ module.exports = (sequelize) => {
         min: 0
       }
     },
-    service_id: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-      validate: {
-        len: [1, 50]
-      }
-    },
     processed_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
@@ -62,8 +55,8 @@ module.exports = (sequelize) => {
     tableName: 'event_logs',
     indexes: [
       {
-        name: 'idx_queue_id',
-        fields: ['queue_id']
+        name: 'idx_session_id',
+        fields: ['session_id']
       },
       {
         name: 'idx_event_type',
@@ -76,10 +69,6 @@ module.exports = (sequelize) => {
       {
         name: 'idx_processed_at',
         fields: ['processed_at']
-      },
-      {
-        name: 'idx_service_id',
-        fields: ['service_id']
       }
     ],
     scopes: {
@@ -112,15 +101,14 @@ module.exports = (sequelize) => {
     }
   });
 
-  EventLog.createLog = async function(queueId, eventType, eventData, status, errorMessage = null, executionTimeMs = null, serviceId = null) {
+  EventLog.createLog = async function(sessionId, eventType, eventData, status, errorMessage = null, executionTimeMs = null) {
     return await this.create({
-      queue_id: queueId,
+      session_id: sessionId,
       event_type: eventType,
       event_data: eventData,
       status: status,
       error_message: errorMessage,
-      execution_time_ms: executionTimeMs,
-      service_id: serviceId
+      execution_time_ms: executionTimeMs
     });
   };
 
@@ -302,7 +290,7 @@ module.exports = (sequelize) => {
     cutoffDate.setHours(cutoffDate.getHours() - hours);
 
     return await this.findAll({
-      attributes: ['event_type', 'execution_time_ms', 'processed_at', 'queue_id'],
+      attributes: ['event_type', 'execution_time_ms', 'processed_at', 'session_id'],
       where: {
         processed_at: {
           [sequelize.Sequelize.Op.gte]: cutoffDate

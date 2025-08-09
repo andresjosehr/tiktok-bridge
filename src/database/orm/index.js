@@ -56,26 +56,31 @@ class DatabaseORM {
   initializeModels() {
     const EventQueueModel = require('./models/EventQueue');
     const EventLogModel = require('./models/EventLog');
+    const LiveSessionModel = require('./models/LiveSession');
 
     this.models.EventQueue = EventQueueModel(this.sequelize);
     this.models.EventLog = EventLogModel(this.sequelize);
+    this.models.LiveSession = LiveSessionModel(this.sequelize);
 
     logger.info('ORM models initialized successfully');
   }
 
   setupAssociations() {
-    const { EventQueue, EventLog } = this.models;
+    const { EventQueue, EventLog, LiveSession } = this.models;
 
-    EventQueue.hasMany(EventLog, {
-      foreignKey: 'queue_id',
-      as: 'logs',
+    // LiveSession associations
+    LiveSession.hasMany(EventLog, {
+      foreignKey: 'session_id',
+      as: 'EventLogs',
       onDelete: 'SET NULL'
     });
 
-    EventLog.belongsTo(EventQueue, {
-      foreignKey: 'queue_id',
-      as: 'queueItem'
+    EventLog.belongsTo(LiveSession, {
+      foreignKey: 'session_id',
+      as: 'LiveSession'
     });
+
+    // Note: Removed EventQueue <-> EventLog associations as queue_id column was removed
 
     logger.info('ORM associations setup successfully');
   }
