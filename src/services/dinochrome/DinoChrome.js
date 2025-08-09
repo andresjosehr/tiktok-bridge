@@ -1993,7 +1993,7 @@ class DinoChrome extends ServiceBase {
               return null;
             }).then(recordInfo => {
               if (recordInfo) {
-                logger.info(`${this.emoji} RECORD STATUS: Current=${recordInfo.currentScore}, maxScore=${recordInfo.maxScore}, highScore=${recordInfo.highScore}, dinoHighScore=${recordInfo.dinoHighScore}`);
+                // logger.info(`${this.emoji} RECORD STATUS: Current=${recordInfo.currentScore}, maxScore=${recordInfo.maxScore}, highScore=${recordInfo.highScore}, dinoHighScore=${recordInfo.dinoHighScore}`);
               }
             }).catch(err => {
               logger.debug(`${this.emoji} Error getting record info: ${err.message}`);

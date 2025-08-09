@@ -9,6 +9,7 @@ const configRoutes = require('./config');
 const assetsRoutes = require('./assets');
 const overlayRoutes = require('./overlay');
 const sessionsRoutes = require('./sessions');
+const eventsRoutes = require('./events');
 
 // Mount routes
 router.use('/queue', queueRoutes);
@@ -18,6 +19,7 @@ router.use('/config', configRoutes);
 router.use('/assets', assetsRoutes);
 router.use('/overlay', overlayRoutes);
 router.use('/sessions', sessionsRoutes);
+router.use('/events', eventsRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -31,7 +33,8 @@ router.get('/', (req, res) => {
       config: '/api/config',
       assets: '/api/assets',
       overlay: '/api/overlay',
-      sessions: '/api/sessions'
+      sessions: '/api/sessions',
+      events: '/api/events'
     },
     documentation: {
       queue: [
@@ -88,6 +91,20 @@ router.get('/', (req, res) => {
         'GET /api/sessions/recent - Get recent sessions',
         'POST /api/sessions/current/end - End current session',
         'GET /api/sessions/:sessionId - Get session by ID'
+      ],
+      events: [
+        'GET /api/events/stats/session/:sessionId - Get session event statistics',
+        'GET /api/events/stats/gifts/:sessionId - Get session gift statistics',
+        'GET /api/events/stats/users/:sessionId - Get top users for session',
+        'GET /api/events/current/metrics - Get real-time session metrics',
+        'GET /api/events/current/advanced - Get advanced real-time metrics',
+        'GET /api/events/tracker/status - Get events tracker status',
+        'GET /api/events/visitors/unique/:sessionId - Get unique visitor statistics',
+        'GET /api/events/visitors/timeline/:sessionId - Get visitor activity timeline',
+        'GET /api/events/retention/:username?days=7 - Get user retention analysis',
+        'GET /api/events/engagement/:sessionId - Get user engagement statistics',
+        'GET /api/events/duration/:sessionId - Get session duration analysis',
+        'GET /api/events/flow/:sessionId - Get user flow analysis (entries/exits)'
       ]
     },
     timestamp: new Date().toISOString()

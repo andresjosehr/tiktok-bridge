@@ -3,6 +3,7 @@ const eventManager = require('../eventManager');
 const logger = require('../../utils/logger');
 const config = require('../../config/config');
 const LiveSessionManager = require('../liveSessionManager');
+const tiktokEventsTracker = require('../tiktokEventsTracker');
 
 class TikTokService {
   constructor() {
@@ -18,6 +19,9 @@ class TikTokService {
 
   async initialize() {
     try {
+      // Initialize the events tracker
+      await tiktokEventsTracker.initialize();
+      
       await this.connect(config.tiktok.username);
       logger.info('TikTok service initialized successfully');
     } catch (error) {
@@ -81,7 +85,11 @@ class TikTokService {
       try {
         const queueProcessorManager = require('../../queue/queueProcessor');
         const serviceId = queueProcessorManager.getActiveServiceType();
-        await this.liveSessionManager.startSession(this.currentUsername, serviceId);
+        const session = await this.liveSessionManager.startSession(this.currentUsername, serviceId);
+        
+        // Set the live session in the events tracker
+        tiktokEventsTracker.setCurrentLiveSession(session.id);
+        
         logger.info(`Live session started for ${this.currentUsername} with service ${serviceId}`);
       } catch (error) {
         logger.error('Failed to start live session:', error);
@@ -94,6 +102,9 @@ class TikTokService {
       logger.warn('Disconnected from TikTok live stream');
       this._isConnected = false;
       this.connectedAt = null;
+      
+      // Clear the live session in the events tracker
+      tiktokEventsTracker.setCurrentLiveSession(null);
       
       // End live session
       try {
@@ -191,6 +202,19 @@ class TikTokService {
       logger.debug(`Room user update: ${data.viewerCount} viewers`);
       eventManager.emit('tiktok:viewerCount', {
         viewerCount: data.viewerCount,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    this.connection.on('member', (data) => {
+      logger.debug(`New member joined: ${data.uniqueId}`);
+      
+      // Track member event in session
+      this.liveSessionManager.trackEvent('member');
+      
+      eventManager.emit('tiktok:member', {
+        user: data.uniqueId,
+        userId: data.userId,
         timestamp: new Date().toISOString()
       });
     });
