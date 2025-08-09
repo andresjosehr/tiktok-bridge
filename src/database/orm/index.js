@@ -56,11 +56,9 @@ class DatabaseORM {
   initializeModels() {
     const EventQueueModel = require('./models/EventQueue');
     const EventLogModel = require('./models/EventLog');
-    const QueueStatsModel = require('./models/QueueStats');
 
     this.models.EventQueue = EventQueueModel(this.sequelize);
     this.models.EventLog = EventLogModel(this.sequelize);
-    this.models.QueueStats = QueueStatsModel(this.sequelize);
 
     logger.info('ORM models initialized successfully');
   }
