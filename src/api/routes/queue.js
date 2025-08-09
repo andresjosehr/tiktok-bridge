@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const queueManager = require('../../queue/queueManager');
+const queueProcessor = require('../../queue/queueProcessor');
 const eventManager = require('../../services/eventManager');
 const logger = require('../../utils/logger');
 
@@ -125,6 +126,154 @@ router.post('/simulate/:eventType', async (req, res) => {
   } catch (error) {
     logger.error('Failed to simulate event:', error);
     res.status(500).json({ error: 'Failed to simulate event' });
+  }
+});
+
+// Get available services
+router.get('/services', async (req, res) => {
+  try {
+    const availableServices = queueProcessor.getAvailableServices();
+    const enabledServices = queueProcessor.getEnabledServices();
+    const activeService = queueProcessor.getActiveServiceType();
+    
+    res.json({
+      available: availableServices,
+      enabled: enabledServices,
+      active: activeService
+    });
+  } catch (error) {
+    logger.error('Failed to get services info:', error);
+    res.status(500).json({ error: 'Failed to get services info' });
+  }
+});
+
+// Get active service status
+router.get('/services/active', async (req, res) => {
+  try {
+    const activeService = queueProcessor.getActiveService();
+    const activeServiceType = queueProcessor.getActiveServiceType();
+    
+    let serviceStatus = null;
+    if (activeService && typeof activeService.getServiceStatus === 'function') {
+      serviceStatus = await activeService.getServiceStatus();
+    }
+    
+    res.json({
+      type: activeServiceType,
+      status: serviceStatus
+    });
+  } catch (error) {
+    logger.error('Failed to get active service status:', error);
+    res.status(500).json({ error: 'Failed to get active service status' });
+  }
+});
+
+// Switch active service
+router.post('/services/switch', async (req, res) => {
+  try {
+    const { serviceType } = req.body;
+    
+    if (!serviceType) {
+      return res.status(400).json({ error: 'serviceType is required' });
+    }
+    
+    const availableServices = queueProcessor.getAvailableServices();
+    if (!availableServices.includes(serviceType)) {
+      return res.status(400).json({ 
+        error: `Invalid service type. Available: ${availableServices.join(', ')}` 
+      });
+    }
+    
+    await queueProcessor.changeActiveService(serviceType);
+    
+    res.json({ 
+      success: true, 
+      message: `Active service switched to: ${serviceType}`,
+      activeService: serviceType
+    });
+  } catch (error) {
+    logger.error('Failed to switch active service:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get event logs with service filtering
+router.get('/logs', async (req, res) => {
+  try {
+    const { serviceId, eventType, limit = 100, hours = 24 } = req.query;
+    const orm = require('../../database/orm');
+    const EventLog = orm.getModel('EventLog');
+    
+    const whereClause = {};
+    
+    // Filter by service_id if provided
+    if (serviceId) {
+      whereClause.service_id = serviceId;
+    }
+    
+    // Filter by event_type if provided
+    if (eventType) {
+      whereClause.event_type = eventType;
+    }
+    
+    // Filter by time range
+    if (hours) {
+      const cutoffDate = new Date();
+      cutoffDate.setHours(cutoffDate.getHours() - parseInt(hours));
+      const { Op } = require('sequelize');
+      whereClause.processed_at = {
+        [Op.gte]: cutoffDate
+      };
+    }
+    
+    const logs = await EventLog.findAll({
+      where: whereClause,
+      order: [['processed_at', 'DESC']],
+      limit: parseInt(limit)
+    });
+    
+    res.json({ logs });
+  } catch (error) {
+    logger.error('Failed to get event logs:', error);
+    res.status(500).json({ error: 'Failed to get event logs' });
+  }
+});
+
+// Get service statistics
+router.get('/services/stats', async (req, res) => {
+  try {
+    const { hours = 24 } = req.query;
+    const orm = require('../../database/orm');
+    const EventLog = orm.getModel('EventLog');
+    
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - parseInt(hours));
+    
+    const { fn, col, Op } = require('sequelize');
+    const stats = await EventLog.findAll({
+      attributes: [
+        'service_id',
+        'status',
+        [fn('COUNT', '*'), 'count'],
+        [fn('AVG', col('execution_time_ms')), 'avg_execution_time']
+      ],
+      where: {
+        processed_at: {
+          [Op.gte]: cutoffDate
+        },
+        service_id: {
+          [Op.ne]: null
+        }
+      },
+      group: ['service_id', 'status'],
+      order: [['service_id', 'ASC'], ['status', 'ASC']]
+    });
+    
+    const formattedStats = stats.map(stat => stat.get({ plain: true }));
+    res.json({ stats: formattedStats });
+  } catch (error) {
+    logger.error('Failed to get service stats:', error);
+    res.status(500).json({ error: 'Failed to get service stats' });
   }
 });
 

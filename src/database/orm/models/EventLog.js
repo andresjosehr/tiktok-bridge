@@ -46,6 +46,13 @@ module.exports = (sequelize) => {
         min: 0
       }
     },
+    service_id: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      validate: {
+        len: [1, 50]
+      }
+    },
     processed_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
@@ -69,6 +76,10 @@ module.exports = (sequelize) => {
       {
         name: 'idx_processed_at',
         fields: ['processed_at']
+      },
+      {
+        name: 'idx_service_id',
+        fields: ['service_id']
       }
     ],
     scopes: {
@@ -101,14 +112,15 @@ module.exports = (sequelize) => {
     }
   });
 
-  EventLog.createLog = async function(queueId, eventType, eventData, status, errorMessage = null, executionTimeMs = null) {
+  EventLog.createLog = async function(queueId, eventType, eventData, status, errorMessage = null, executionTimeMs = null, serviceId = null) {
     return await this.create({
       queue_id: queueId,
       event_type: eventType,
       event_data: eventData,
       status: status,
       error_message: errorMessage,
-      execution_time_ms: executionTimeMs
+      execution_time_ms: executionTimeMs,
+      service_id: serviceId
     });
   };
 

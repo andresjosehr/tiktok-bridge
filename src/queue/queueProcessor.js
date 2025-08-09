@@ -185,7 +185,7 @@ class QueueProcessor {
       await job.markAsCompleted();
       
       const EventLog = orm.getModel('EventLog');
-      await EventLog.createLog(job.id, job.event_type, job.event_data, 'success', null, executionTime);
+      await EventLog.createLog(job.id, job.event_type, job.event_data, 'success', null, executionTime, this.activeService.serviceName);
       
       logger.debug(`${this.name} job ${job.id} completed successfully in ${executionTime}ms`);
       
@@ -199,7 +199,7 @@ class QueueProcessor {
         await job.markAsCompleted();
         
         const EventLog = orm.getModel('EventLog');
-        await EventLog.createLog(job.id, job.event_type, job.event_data, 'skipped', error.message, executionTime);
+        await EventLog.createLog(job.id, job.event_type, job.event_data, 'skipped', error.message, executionTime, this.activeService.serviceName);
       } else {
         logger.error(`${this.name} job ${job.id} failed:`, error);
         
@@ -207,7 +207,7 @@ class QueueProcessor {
         await job.markAsFailed(retryDelay);
         
         const EventLog = orm.getModel('EventLog');
-        await EventLog.createLog(job.id, job.event_type, job.event_data, 'failed', error.message, executionTime);
+        await EventLog.createLog(job.id, job.event_type, job.event_data, 'failed', error.message, executionTime, this.activeService.serviceName);
       }
     }
   }
@@ -327,7 +327,8 @@ class QueueProcessorManager {
     this.queueProcessor = null;
     this.isProcessing = false;
     this.enabledProcessors = config.queue.enabledProcessors || ['gmod'];
-    this.activeServiceType = this.enabledProcessors[0]; // Usar el primer servicio habilitado
+    // MODIFICADO: Solo permitir un servicio activo por vez
+    this.activeServiceType = this.enabledProcessors[0]; // Usar el primer servicio habilitado como único activo
     this.services = new Map();
     this.initializeServices();
   }
@@ -436,7 +437,7 @@ class QueueProcessorManager {
     }
   }
 
-  changeActiveService(serviceType) {
+  async changeActiveService(serviceType) {
     const service = this.services.get(serviceType);
     if (!service) {
       throw new Error(`Unknown service type: ${serviceType}`);
@@ -447,7 +448,21 @@ class QueueProcessorManager {
       throw new Error(`Service ${serviceType} is not enabled in configuration`);
     }
     
+    // MODIFICADO: Desconectar el servicio anterior antes de cambiar
+    const previousService = this.services.get(this.activeServiceType);
+    if (previousService && typeof previousService.disconnect === 'function' && this.isProcessing) {
+      logger.info(`Disconnecting previous service: ${this.activeServiceType}`);
+      await previousService.disconnect();
+    }
+    
     this.activeServiceType = serviceType;
+    
+    // Conectar el nuevo servicio si el procesador está corriendo
+    if (this.isProcessing && typeof service.connect === 'function') {
+      logger.info(`Connecting new service: ${serviceType}`);
+      await service.connect();
+    }
+    
     if (this.queueProcessor) {
       this.queueProcessor.changeActiveService(service);
     }
